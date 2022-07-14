@@ -32,9 +32,9 @@ int lineno = 1;
 "ADD"                     { return ADD; }
 "SUB"                     { return SUB; }
 "NAND"                    { return NAND; }
-"MUL"                     { return MUL; }
+/*"MUL"                     { return MUL; }
 "DIV"                     { return DIV; }
-"MOD"                     { return MOD; }
+"MOD"                     { return MOD; }*/
 "LOAD"                    { return LOAD; }
 "STORE"                   { return STORE; }
 "IN"                      { return IN; }

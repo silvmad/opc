@@ -294,7 +294,7 @@ op      :       ADD '#' number { mem[mem_pos++] = 0x20;
                       mem[mem_pos] = 0xE2;
                       mem_pos += 2;
                     } }
-	|	MUL '#' number { mem[mem_pos++] = 0x23;
+/*	|	MUL '#' number { mem[mem_pos++] = 0x23;
                                  mem[mem_pos++] = $3; }
 	|	MUL address { mem[mem_pos++] = 0x63;
                               mem[mem_pos++] = $2; }
@@ -401,7 +401,7 @@ op      :       ADD '#' number { mem[mem_pos++] = 0x20;
                       pending_vars[n_pvar++].name = $3;
                       mem[mem_pos] = 0xE5;
                       mem_pos += 2;
-                    } }
+                    } }*/
 	|	LOAD '#' number { mem[mem_pos++] = 0x0;
                                   mem[mem_pos++] = $3; }
 	|	LOAD address { mem[mem_pos++] = 0x40;
@@ -441,10 +441,10 @@ op      :       ADD '#' number { mem[mem_pos++] = 0x20;
 /*	|	LFS number { mem[mem_pos++] = 0x3;
                              mem[mem_pos++] = $2; }*/
 	|	POP { mem[mem_pos++] = 0x4;
-                      mem[mem_pos++] = 0;
+                      mem[mem_pos++] = 0; }
                       //--stack_count; }
 	|	POP address { mem[mem_pos++] = 0x44;
-                              mem[mem_pos++] = $2;
+                              mem[mem_pos++] = $2; }
                               //--stack_count; }
 	|	POP IDENTIFIER
                 {
@@ -459,10 +459,10 @@ op      :       ADD '#' number { mem[mem_pos++] = 0x20;
                       pending_vars[n_pvar++].name = $2;
                       mem[mem_pos] = 0x44;
                       mem_pos += 2;
-                    } 
+                    } }
                   //--stack_count; }
 	|	POP '*' address { mem[mem_pos++] = 0xC4;
-                                  mem[mem_pos++] = $3; 
+                                  mem[mem_pos++] = $3; }
                                   //--stack_count; }
 	|	POP '*' IDENTIFIER
                 {
@@ -477,13 +477,13 @@ op      :       ADD '#' number { mem[mem_pos++] = 0x20;
                       pending_vars[n_pvar++].name = $3;
                       mem[mem_pos] = 0xC4;
                       mem_pos += 2;
-                    } 
+                    } }
                   //--stack_count; }
 	|	PUSH { mem[mem_pos++] = 0x5;
-                       mem[mem_pos++] = 0;
+                       mem[mem_pos++] = 0; }
                        //++stack_count; }
 	|	PUSH address { mem[mem_pos++] = 0x45;
-                              mem[mem_pos++] = $2;
+                              mem[mem_pos++] = $2; }
                               //++stack_count; }
 	|	PUSH IDENTIFIER
                 {
@@ -498,10 +498,10 @@ op      :       ADD '#' number { mem[mem_pos++] = 0x20;
                       pending_vars[n_pvar++].name = $2;
                       mem[mem_pos] = 0x45;
                       mem_pos += 2;
-                    } 
+                    } }
                   //++stack_count; }
 	|	PUSH '*' address { mem[mem_pos++] = 0xC5;
-                                   mem[mem_pos++] = $3; 
+                                   mem[mem_pos++] = $3; }
                                    //++stack_count; }
 	|	PUSH '*' IDENTIFIER
                 {
@@ -516,7 +516,7 @@ op      :       ADD '#' number { mem[mem_pos++] = 0x20;
                       pending_vars[n_pvar++].name = $3;
                       mem[mem_pos] = 0xC5;
                       mem_pos += 2;
-                    } 
+                    } }
                   //++stack_count; }
 	|	STORE address { mem[mem_pos++] = 0x48;
                                 mem[mem_pos++] = $2; }
