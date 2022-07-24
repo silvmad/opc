@@ -21,7 +21,6 @@ int lineno = 1;
 %option noyywrap
 %option noinput
 %option nounput
-%option case-insensitive
 						
 %%
 [ \t]+                    { /* Ignorer les espaces. */ }
@@ -32,13 +31,11 @@ int lineno = 1;
 "ADD"                     { return ADD; }
 "SUB"                     { return SUB; }
 "NAND"                    { return NAND; }
-/*"MUL"                     { return MUL; }
-"DIV"                     { return DIV; }
-"MOD"                     { return MOD; }*/
 "LOAD"                    { return LOAD; }
 "STORE"                   { return STORE; }
 "IN"                      { return IN; }
 "OUT"                     { return OUT; }
+"OUTC"                    { return OUTC; }
 "POP"                     { return POP; }
 "PUSH"                    { return PUSH; }
 "JUMP"                    { return JUMP; }
@@ -50,4 +47,8 @@ int lineno = 1;
 -?[0-9]+                  { yylval.i = atoi(yytext); return NUM; }
 [\._a-zA-Z][_a-zA-Z0-9]*  { yylval.s = strdup(yytext);
                             return IDENTIFIER; }
+\".*\"                    { char *string = yytext + 1;
+                            string[strlen(string) - 1] = 0;
+                            yylval.s = strdup(string);
+                            return STRING; }
 %%

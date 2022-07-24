@@ -3,7 +3,7 @@ CFLAGS = -Wall
 all : pasm
 
 debug : CFLAGS += -g
-debug : all
+debug : clean all
 
 pasm : pasm.tab.o lex.yy.o main.o
 	gcc -o pasm main.o lex.yy.o pasm.tab.o
@@ -26,4 +26,4 @@ lex.yy.c : pasm.l
 .PHONY : clean
 
 clean :
-	rm pasm.tab.h pasm.tab.c lex.yy.c lex.yy.o pasm.tab.o main.o 
+	-rm pasm.tab.h pasm.tab.c lex.yy.c lex.yy.o pasm.tab.o main.o 

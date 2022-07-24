@@ -14,6 +14,7 @@ Code de lancement de l'assembleur pour l'ordinateur en papier.
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdbool.h>
 
 #include "pasm.tab.h"
 #include "pasm.h"
@@ -22,20 +23,29 @@ extern int lineno;
 extern int mem_pos;
 extern int error_count;
 extern int in_func;
+id rom_funcs[256];
+int rf_count = 0;
+extern char* functions[];
+extern int n_func;
+
+bool make_rom = false;
 
 void usage(char*);
 
 int fill_pending_labels(void);
 void fill_variables(void);
 void print_prog(int, int);
+int get_lab_addr(char*);
 
 // Flags des options.
-enum { B_OPT = 1, O_OPT = 2, T_OPT = 4, P_OPT = 8 };
+enum { B_OPT = 1, O_OPT = 2, T_OPT = 4, P_OPT = 8, R_OPT = 16, L_OPT = 32,
+  I_OPT = 64 };
 
 int main(int argc, char **argv)
 {
   int opt;
   char *output_filename = NULL;
+  char *rom_filename = NULL;
   int options = 0;
   int offset = 0;
   while (1)
@@ -45,10 +55,12 @@ int main(int argc, char **argv)
 	  { "offset", optional_argument, 0, 't'},
 	  { "binary", no_argument, 0, 'b' },
 	  { "print", no_argument, 0, 'p' },
+	  { "make_rom", required_argument, 0, 'r' },
+	  { "use_rom", required_argument, 0, 'l' },
 	  { 0, 0, 0, 0}
 	};
 
-      opt = getopt_long(argc, argv, "bo:t:p", long_options, NULL);
+      opt = getopt_long(argc, argv, "bo:t:pr:l:i", long_options, NULL);
 
       if (opt == -1)
 	break;
@@ -91,6 +103,18 @@ int main(int argc, char **argv)
 	case 'p':
 	  options |= P_OPT;
 	  break;
+	case 'r' :
+	  options |= R_OPT;
+	  rom_filename = strdup(optarg);
+	  make_rom = true;
+	  break;
+	case 'l' :
+	  options |= L_OPT;
+	  rom_filename = strdup(optarg);
+	  break;
+	case 'i':
+	  options |= I_OPT;
+	  break;
 	case '?': ;
 	  char s[1024];
 	  snprintf(s, 1024, "Usage : %s [OPTION]... FILE", argv[0]);
@@ -100,7 +124,7 @@ int main(int argc, char **argv)
 	}
     }
 
-  if (optind == argc)
+  if (!(options & I_OPT) && optind == argc)
     {
       char s[1024];
       snprintf(s, 1024, "Usage : %s [OPTION]... FILE", argv[0]);
@@ -120,12 +144,97 @@ int main(int argc, char **argv)
 	      "option -b ignorée.\n", argv[0]);
       options &= ~B_OPT;
     }
+  if (options & R_OPT)
+    {
+      if (options & L_OPT)
+	{
+	  fprintf(stderr, "%s: Options -l et -r incompatibles : "
+		  "option -l ignorée.\n", argv[0]);
+	  options &= ~L_OPT;
+	}
+      if (options & O_OPT)
+	{
+	  fprintf(stderr, "%s: Options -o et -r incompatibles : "
+		  "option -o ignorée.\n", argv[0]);
+	  options &= ~O_OPT;
+	}
+      if (options & P_OPT)
+	{
+	  fprintf(stderr, "%s: Options -p et -r incompatibles : "
+		  "option -p ignorée.\n", argv[0]);
+	  options &= ~P_OPT;
+	}
+      if (options & B_OPT)
+	{
+	  fprintf(stderr, "%s: Options -b et -r incompatibles : "
+		  "option -b ignorée.\n", argv[0]);
+	  options &= ~B_OPT;
+	}
+      if (options & T_OPT)
+	{
+	  fprintf(stderr, "%s: Options -t et -r incompatibles : "
+		  "option -t ignorée.\n", argv[0]);
+	  options &= ~T_OPT;
+	}
+    }
   
   if (options & T_OPT)
     {
       mem_pos = offset;
     }
 
+  char rom_addr_path[ROM_PATH_MAX_LEN] = {0};
+  char rom_path[ROM_PATH_MAX_LEN] = {0};
+  if (options & L_OPT || options & R_OPT)
+    {
+      char *home_path = getenv("HOME");
+      strncpy(rom_addr_path, home_path, ROM_PATH_MAX_LEN - 1);
+      strncpy(rom_path, home_path, ROM_PATH_MAX_LEN - 1);
+      int len = ROM_PATH_MAX_LEN - 1 - strlen(home_path);
+      strncat(rom_addr_path, CUSTOM_ROM_PATH, len);
+      strncat(rom_path, CUSTOM_ROM_PATH, len);
+      len = len - strlen(CUSTOM_ROM_PATH);
+      strncat(rom_addr_path, rom_filename, len);
+      strncat(rom_path, rom_filename, len);
+      strncat(rom_addr_path, "_addr", len - strlen(rom_filename));
+    }
+  else
+    {
+      strncpy(rom_addr_path, ROM_DEFAULT_ADDR_PATH, ROM_PATH_MAX_LEN);
+      strncpy(rom_path, ROM_DEFAULT_PATH, ROM_PATH_MAX_LEN);
+    }
+	      
+  // Charger les adresses des fonctions de la rom.
+  //id rom_funcs[256];
+  if (!(options & R_OPT))
+    {
+      FILE *rom = fopen(rom_addr_path, "r");
+      char buffer[2048];
+      char *endptr;
+      while(fscanf(rom, " %[^\n ]", buffer) != EOF)
+	{
+	  rom_funcs[rf_count].name = strdup(buffer);
+	  if (fscanf(rom, " %[^\n ]", buffer) == EOF)
+	    {
+	      printf("Erreur : contenu du fichier %s incorrect.\n",
+		     rom_addr_path);
+	    }
+	  rom_funcs[rf_count++].addr = strtol(buffer, &endptr, 16);
+	  if (*endptr != 0)
+	  {
+	    printf("Erreur : le fichier %s contient des adresses invalides.\n",
+		   rom_addr_path);
+	    exit(1);
+	  }
+	}
+      fclose(rom);
+      /* Ajouter les fonctions de la rom au tableau des fonctions pour que
+	 l'analyseur en ait connaissance. */
+      for (int i = 0; i < rf_count; ++i)
+	{
+	  functions[n_func++] = rom_funcs[i].name;
+	}
+    }
   /* Le nom du fichier en entrée doit se terminer par .pasm et doit 
      comporter au moins un caractère avant le point.  */
   char *input_filename = argv[optind];
@@ -134,13 +243,18 @@ int main(int argc, char **argv)
     {
       usage("Erreur : format de fichier d'entrée incorrect.");
     }
-  // Redirection de l'entrée standard.
-  FILE *f = freopen(input_filename, "r", stdin);
-  if (f == NULL)
+
+  if (!(options & I_OPT))
     {
-      char s[1024];
-      snprintf(s, 1024, "Impossible d'ouvrir le fichier %s", input_filename);
-      usage(s);
+      // Redirection de l'entrée standard.
+      FILE *f = freopen(input_filename, "r", stdin);
+      if (f == NULL)
+	{
+	  char s[1024];
+	  snprintf(s, 1024, "Impossible d'ouvrir le fichier %s",
+		   input_filename);
+	  usage(s);
+	}
     }
   int r = yyparse();
   if (in_func)
@@ -153,10 +267,14 @@ int main(int argc, char **argv)
   if (r == 0 && error_count == 0 && r2 == 0)
     {
       fill_variables();
-	  
       // Redirection de la sortie standard
-      // Si ni -o ni -p ne sont présentes.
-      if (!(options & P_OPT) && !(options & O_OPT))
+      // Si -r, redirection vers le fichier donné en argument.
+      if (options & R_OPT)	
+	{
+	  freopen(rom_path, "w", stdout);
+	}	  
+      // Sinon, si ni -o ni -p ne sont présentes.
+      else if (!(options & P_OPT) && !(options & O_OPT))
 	/* Détermination du nom du fichier de sortie et redirection vers
 	   celui-ci */
 	{
@@ -178,13 +296,14 @@ int main(int argc, char **argv)
 	      freopen(output_filename, "w", stdout);
 	    }
 	}
-      // L'option -o ou -p est présente
-      else if (!(options & P_OPT))
+      // Sinon, l'option -o ou -p est présente
+      else if (options & O_OPT)
 	// Si -o, redirection vers le fichier donné en argument.
 	{
 	  freopen(output_filename, "w", stdout);
-	} /* Sinon -p est présente et on écrit sur stdout, il n'y a donc
-	     rien à faire. */
+	}
+      /* Sinon -p est présente et on écrit sur stdout, il n'y a donc
+	 pas de redirection à faire. */
       if (options & B_OPT)
 	{
 	  print_prog(offset, BIN);
@@ -192,6 +311,17 @@ int main(int argc, char **argv)
       else
 	{
 	  print_prog(offset, TEXT);
+	}
+      // Écrire le fichier des adresses de fonctions de la rom.
+      if (options & R_OPT)
+	{
+	  FILE *rom_addr_file = fopen(rom_addr_path, "w");
+	  for (int i = 0; i < n_func; ++i)
+	    {
+	      char * fname = functions[i];
+	      fprintf(rom_addr_file, "%s %02x\n", fname, get_lab_addr(fname));
+	    }
+	  fclose(rom_addr_file);
 	}
     }
 }

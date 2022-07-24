@@ -15,6 +15,7 @@ Analyseur syntaxique de l'assembleur pour l'ordinateur en papier.
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 
 #include "pasm.tab.h"
 #include "pasm.h"
@@ -24,25 +25,19 @@ extern int yylex();
 int get_var_addr(char*);
 int get_lab_addr(char*);
 int label_exists(int);
-int func_exists(char*);
-
-/* Structure qui lie un nom et une adresse, peut être utilisée pour 
- * représenter un label ou une variable. */
-typedef struct {
-    int addr;
-    char *name;
-    int lineno; // La ligne où le nom apparaît dans le fichier source.
-} id;
+bool func_exists(char*);
+int rom_func_addr(char*);
+bool is_rom_func(char*);
 
 // Variables globales de l'analyseur lexical.
 extern int lineno;
 extern char *yytext;
 
 // Variables globales de l'analyseur syntaxique.
-unsigned char mem[256];
+unsigned int mem[256];
 int mem_pos = 0;
 
-id variables[256];
+var variables[256];
 int n_var = 0;
 id pending_vars[256];
 int n_pvar = 0;
@@ -57,7 +52,11 @@ int n_plab = 0;
 
 char *functions[256];
 int n_func = 0;
-int in_func = 0;
+bool in_func = false;
+
+extern id rom_funcs[256];
+extern int rf_count;
+extern int make_rom;
 
 int error_count = 0;
 
@@ -71,8 +70,9 @@ int error_count = 0;
 
 %token	<i> NUM
 %token  <s> IDENTIFIER
+%token	<s> STRING
 			
-%token GLOBL FUNC ADD SUB NAND MUL DIV MOD LOAD STORE IN OUT POP PUSH JUMP BRN BRZ CALL RET
+%token GLOBL FUNC ADD SUB NAND LOAD STORE IN OUT OUTC POP PUSH JUMP BRN BRZ CALL RET
 
 %type	<i> number
 %type	<i> address
@@ -111,8 +111,61 @@ decl    :       GLOBL IDENTIFIER '\n'
 	            {
                       /* C'est un simple warning, pas une erreur : la 
                        * deuxième déclaration est ignorée. */
-			fprintf(stderr, "%i: Warning : variable définie deux"
+			fprintf(stderr, "%i: Warning : variable déclarée "
+                                "deux fois : %s\n", lineno - 1, $2);
+                    } }
+	|	GLOBL IDENTIFIER number '\n'
+                { if (get_var_addr($2) == -1)
+	            {
+                      variables[n_var].name = $2;
+                      variables[n_var].val = $3;
+                      variables[n_var].val_set = true;
+                      variables[n_var++].addr = 0;
+                    }
+                  else
+	            {
+                      /* Ce coup ci on déclenche une erreur car la valeur de
+                         la variable serait perdue si on ignore la deuxième
+                         déclaration. */
+		      fprintf(stderr, "%i: Erreur : variable définie deux"
                                 " fois : %s\n", lineno - 1, $2);
+                      YYERROR;
+                    } }
+	|	GLOBL IDENTIFIER STRING '\n'
+                { char *str = $3;
+                  for (int i = 0; i < strlen(str); ++i)
+		    {
+		      if (!strchr(ASCII_PRINTABLE, str[i]))
+		        {
+			  fprintf(stderr,
+                                 "%i : Erreur, les chaînes de caractères littérales ne peuvent contenir que des caractères imprimables ascii. Le caractère incorrect est '%c' dans '%s'.",
+                                  lineno - 1, str[i], $3);
+                          YYERROR;
+                        }
+                    }
+                  if (get_var_addr($2) == -1)
+	            { 
+                      variables[n_var].name = $2;
+                      variables[n_var].val = str[0];
+                      variables[n_var].val_set = true;
+                      variables[n_var++].addr = 0;
+                      // On copie toute la chaîne y compris le 0 final.
+                      for (int i = 1; i <= strlen(str); ++i)
+   		        {
+                          variables[n_var].name = 0;
+                          variables[n_var].val = str[i];
+                          variables[n_var].val_set = true;
+                          variables[n_var++].addr = 0;
+                        }
+                    }
+                  else
+	            {
+                      /* Ce coup ci on déclenche une erreur car la valeur de
+                         la variable serait perdue si on ignore la deuxième
+                         déclaration. */
+		      fprintf(stderr, "%i: Erreur : variable définie deux"
+                                " fois : %s\n", lineno - 1, $2);
+                      YYERROR;
                     } }
 	|	FUNC IDENTIFIER '\n'
                 { if (func_exists($2))
@@ -135,7 +188,7 @@ instr :         IDENTIFIER ':'
                                   "fonction.\n", lineno - 1);
                           YYERROR;
                         }
-                      in_func = 1;
+                      in_func = true;
                     }
                   if (label_exists(mem_pos))
 		    {
@@ -164,7 +217,7 @@ instr :         IDENTIFIER ':'
                                   "fonction.\n", lineno - 1);
                           YYERROR;
                         }
-                      in_func = 1;
+                      in_func = true;
                     }
                   if (label_exists(mem_pos))
 		    {
@@ -222,6 +275,21 @@ op      :       ADD '#' number { mem[mem_pos++] = 0x20;
                       mem[mem_pos] = 0xE0;
                       mem_pos += 2;
                     } }
+	|	ADD '*' '%'  address { mem[mem_pos++] = 0xF0;
+                                       mem[mem_pos++] = $4; }
+	|	ADD '*' '%' IDENTIFIER
+                { if (get_var_addr($4) == -1)
+		    {
+                      yyerror("Variable non déclarée");
+                      YYERROR;
+                    }
+                  else
+		    {
+                      pending_vars[n_pvar].addr = mem_pos + 1;
+                      pending_vars[n_pvar++].name = $4;
+                      mem[mem_pos] = 0xF0;
+                      mem_pos += 2;
+                    } }
 	|	SUB '#' number { mem[mem_pos++] = 0x21;
                                  mem[mem_pos++] = $3; }
 	|	SUB address { mem[mem_pos++] = 0x61;
@@ -256,6 +324,22 @@ op      :       ADD '#' number { mem[mem_pos++] = 0x20;
                       pending_vars[n_pvar].addr = mem_pos + 1;
                       pending_vars[n_pvar++].name = $3;
                       mem[mem_pos] = 0xE1;
+                      mem_pos += 2;
+                    } }
+	|	SUB '*' '%' address { mem[mem_pos++] = 0xF1;
+                                  mem[mem_pos++] = $4; }
+	|	SUB '*' '%' IDENTIFIER
+                { 
+                  if (get_var_addr($4) == -1)
+		    {
+                      yyerror("Variable non déclarée");
+                      YYERROR;
+                    }
+                  else
+		    {
+                      pending_vars[n_pvar].addr = mem_pos + 1;
+                      pending_vars[n_pvar++].name = $4;
+                      mem[mem_pos] = 0xF1;
                       mem_pos += 2;
                     } }
 	|	NAND '#' number { mem[mem_pos++] = 0x22;
@@ -294,13 +378,11 @@ op      :       ADD '#' number { mem[mem_pos++] = 0x20;
                       mem[mem_pos] = 0xE2;
                       mem_pos += 2;
                     } }
-/*	|	MUL '#' number { mem[mem_pos++] = 0x23;
-                                 mem[mem_pos++] = $3; }
-	|	MUL address { mem[mem_pos++] = 0x63;
-                              mem[mem_pos++] = $2; }
-	|	MUL IDENTIFIER
+	|	NAND '*' '%' address { mem[mem_pos++] = 0xF2;
+                                   mem[mem_pos++] = $4; }
+	|	NAND '*' '%' IDENTIFIER
                 {
-                  if (get_var_addr($2) == -1)
+                  if (get_var_addr($4) == -1)
 		    {
                       yyerror("Variable non déclarée");
                       YYERROR;
@@ -308,102 +390,26 @@ op      :       ADD '#' number { mem[mem_pos++] = 0x20;
                   else
 		    {
                       pending_vars[n_pvar].addr = mem_pos + 1;
-                      pending_vars[n_pvar++].name = $2;
-                      mem[mem_pos] = 0x63;
+                      pending_vars[n_pvar++].name = $4;
+                      mem[mem_pos] = 0xF2;
                       mem_pos += 2;
                     } }
-	|	MUL '%' number { mem[mem_pos++] = 0xA3;
-                                 mem[mem_pos++] = $3; }
-	|	MUL '*' address { mem[mem_pos++] = 0xE3;
-                                  mem[mem_pos++] = $3; }
-	|	MUL '*' IDENTIFIER
-                { 
-                  if (get_var_addr($3) == -1)
-		    {
-                      yyerror("Variable non déclarée");
-                      YYERROR;
-                    }
-                  else
-		    {
-                      pending_vars[n_pvar].addr = mem_pos + 1;
-                      pending_vars[n_pvar++].name = $3;
-                      mem[mem_pos] = 0xE3;
-                      mem_pos += 2;
-                    } }
-	|	DIV '#' number { mem[mem_pos++] = 0x24;
-                                 mem[mem_pos++] = $3; }
-	|	DIV address { mem[mem_pos++] = 0x64;
-                              mem[mem_pos++] = $2; }
-	|	DIV IDENTIFIER
-                {
-                  if (get_var_addr($2) == -1)
-		    {
-                      yyerror("Variable non déclarée");
-                      YYERROR;
-                    }
-                  else
-		    {
-                      pending_vars[n_pvar].addr = mem_pos + 1;
-                      pending_vars[n_pvar++].name = $2;
-                      mem[mem_pos] = 0x64;
-                      mem_pos += 2;
-                    } }
-	|	DIV '%' number { mem[mem_pos++] = 0xA4;
-                                 mem[mem_pos++] = $3; }
-	|	DIV '*' address { mem[mem_pos++] = 0xE4;
-                                  mem[mem_pos++] = $3; }
-	|	DIV '*' IDENTIFIER
-                { 
-                  if (get_var_addr($3) == -1)
-		    {
-                      yyerror("Variable non déclarée");
-                      YYERROR;
-                    }
-                  else
-		    {
-                      pending_vars[n_pvar].addr = mem_pos + 1;
-                      pending_vars[n_pvar++].name = $3;
-                      mem[mem_pos] = 0xE4;
-                      mem_pos += 2;
-                    } }
-	|	MOD '#' number { mem[mem_pos++] = 0x25;
-                                 mem[mem_pos++] = $3; }
-	|	MOD address { mem[mem_pos++] = 0x65;
-                              mem[mem_pos++] = $2; }
-	|	MOD IDENTIFIER
-                {
-                  if (get_var_addr($2) == -1)
-		    {
-                      yyerror("Variable non déclarée");
-                      YYERROR;
-                    }
-                  else
-		    {
-                      pending_vars[n_pvar].addr = mem_pos + 1;
-                      pending_vars[n_pvar++].name = $2;
-                      mem[mem_pos] = 0x65;
-                      mem_pos += 2;
-                    } }
-	|	MOD '%' number { mem[mem_pos++] = 0xA5;
-                                 mem[mem_pos++] = $3; }
-	|	MOD '*' address { mem[mem_pos++] = 0xE5;
-                                  mem[mem_pos++] = $3; }
-	|	MOD '*' IDENTIFIER
-                { 
-                  if (get_var_addr($3) == -1)
-		    {
-                      yyerror("Variable non déclarée");
-                      YYERROR;
-                    }
-                  else
-		    {
-                      pending_vars[n_pvar].addr = mem_pos + 1;
-                      pending_vars[n_pvar++].name = $3;
-                      mem[mem_pos] = 0xE5;
-                      mem_pos += 2;
-                    } }*/
 	|	LOAD '#' number { mem[mem_pos++] = 0x0;
                                   mem[mem_pos++] = $3; }
+	|	LOAD '#' IDENTIFIER
+                {
+                  if (get_var_addr($2) == -1)
+		    {
+                      yyerror("Variable non déclarée");
+                      YYERROR;
+                    }
+                  else
+		    {
+                      pending_vars[n_pvar].addr = mem_pos + 1;
+                      pending_vars[n_pvar++].name = $2;
+                      mem[mem_pos] = 0x0;
+                      mem_pos += 2;
+                    } }
 	|	LOAD address { mem[mem_pos++] = 0x40;
                                mem[mem_pos++] = $2; }
 	|	LOAD IDENTIFIER
@@ -438,11 +444,27 @@ op      :       ADD '#' number { mem[mem_pos++] = 0x20;
                       mem[mem_pos] = 0xC0;
                       mem_pos += 2;
                     } }
-/*	|	LFS number { mem[mem_pos++] = 0x3;
-                             mem[mem_pos++] = $2; }*/
+	|	LOAD '*' '%' address { mem[mem_pos++] = 0xD0;
+                                       mem[mem_pos++] = $4; }
+	|	LOAD '*' '%' IDENTIFIER
+                {
+                  if (get_var_addr($4) == -1)
+		    {
+                      yyerror("Variable non déclarée");
+                      YYERROR;
+                    }
+                  else
+		    {
+                      pending_vars[n_pvar].addr = mem_pos + 1;
+                      pending_vars[n_pvar++].name = $4;
+                      mem[mem_pos] = 0xD0;
+                      mem_pos += 2;
+                    } }
 	|	POP { mem[mem_pos++] = 0x4;
                       mem[mem_pos++] = 0; }
                       //--stack_count; }
+	|	POP '#' number { mem[mem_pos++] = 0x6;
+                                 mem[mem_pos++] = $3; }
 	|	POP address { mem[mem_pos++] = 0x44;
                               mem[mem_pos++] = $2; }
                               //--stack_count; }
@@ -482,6 +504,22 @@ op      :       ADD '#' number { mem[mem_pos++] = 0x20;
 	|	PUSH { mem[mem_pos++] = 0x5;
                        mem[mem_pos++] = 0; }
                        //++stack_count; }
+	|	PUSH '#' number { mem[mem_pos++] = 0x7;
+                                  mem[mem_pos++] = $3; }
+	|	PUSH '#' IDENTIFIER
+                {
+                  if (get_var_addr($3) == -1)
+		    {
+                      yyerror("Variable non déclarée");
+                      YYERROR;
+                    }
+                  else
+		    {
+                      pending_vars[n_pvar].addr = mem_pos + 1;
+                      pending_vars[n_pvar++].name = $3;
+                      mem[mem_pos] = 0x7;
+                      mem_pos += 2;
+                    } }
 	|	PUSH address { mem[mem_pos++] = 0x45;
                               mem[mem_pos++] = $2; }
                               //++stack_count; }
@@ -499,7 +537,6 @@ op      :       ADD '#' number { mem[mem_pos++] = 0x20;
                       mem[mem_pos] = 0x45;
                       mem_pos += 2;
                     } }
-                  //++stack_count; }
 	|	PUSH '*' address { mem[mem_pos++] = 0xC5;
                                    mem[mem_pos++] = $3; }
                                    //++stack_count; }
@@ -552,6 +589,22 @@ op      :       ADD '#' number { mem[mem_pos++] = 0x20;
                       mem[mem_pos] = 0xC8;
                       mem_pos += 2;
                     } }
+	|	STORE '*' '%' address { mem[mem_pos++] = 0xD8;
+                                    mem[mem_pos++] = $4; }
+	|	STORE '*' '%' IDENTIFIER
+                {
+                  if (get_var_addr($4) == -1)
+		    {
+                      yyerror("Variable non déclarée");
+                      YYERROR;
+                    }
+                  else
+		    {
+                      pending_vars[n_pvar].addr = mem_pos + 1;
+                      pending_vars[n_pvar++].name = $4;
+                      mem[mem_pos] = 0xD8;
+                      mem_pos += 2;
+                    } }
 	|	IN address { mem[mem_pos++] = 0x49;
                              mem[mem_pos++] = $2; }
 	|	IN IDENTIFIER
@@ -586,6 +639,22 @@ op      :       ADD '#' number { mem[mem_pos++] = 0x20;
                       mem[mem_pos] = 0xC9;
                       mem_pos += 2;
                     }}
+	|	IN '*' '%' address { mem[mem_pos++] = 0xD9;
+                                 mem[mem_pos++] = $4; }
+	|	IN '*' '%' IDENTIFIER
+                {
+                  if (get_var_addr($4) == -1)
+		    {
+                      yyerror("Variable non déclarée");
+                      YYERROR;
+                    }
+                  else
+		    {
+                      pending_vars[n_pvar].addr = mem_pos + 1;
+                      pending_vars[n_pvar++].name = $4;
+                      mem[mem_pos] = 0xD9;
+                      mem_pos += 2;
+                    }}
 	|	OUT address { mem[mem_pos++] = 0x41;
                               mem[mem_pos++] = $2; }
 	|	OUT IDENTIFIER
@@ -618,6 +687,72 @@ op      :       ADD '#' number { mem[mem_pos++] = 0x20;
                       pending_vars[n_pvar].addr = mem_pos + 1;
                       pending_vars[n_pvar++].name = $3;
                       mem[mem_pos] = 0xC1;
+                      mem_pos += 2;
+                    } }
+	|	OUT '*' '%' address { mem[mem_pos++] = 0xD1;
+                                  mem[mem_pos++] = $4; }
+	|	OUT '*' '%' IDENTIFIER
+                {
+                  if (get_var_addr($4) == -1)
+		    {
+                      yyerror("Variable non déclarée");
+                      YYERROR;
+                    }
+                  else
+		    {
+                      pending_vars[n_pvar].addr = mem_pos + 1;
+                      pending_vars[n_pvar++].name = $4;
+                      mem[mem_pos] = 0xD1;
+                      mem_pos += 2;
+                    } }
+	|	OUTC address { mem[mem_pos++] = 0x42;
+                               mem[mem_pos++] = $2; }
+	|	OUTC IDENTIFIER
+                {
+                  if (get_var_addr($2) == -1)
+		    {
+                      yyerror("Variable non déclarée");
+                      YYERROR;
+                    }
+                  else
+		    {
+                      pending_vars[n_pvar].addr = mem_pos + 1;
+                      pending_vars[n_pvar++].name = $2;
+                      mem[mem_pos] = 0x42;
+                      mem_pos += 2;
+                    } }
+	|	OUTC '%' number { mem[mem_pos++] = 0x82;
+                                  mem[mem_pos++] = $3; }
+	|	OUTC '*' address { mem[mem_pos++] = 0xC2;
+                                  mem[mem_pos++] = $3; }
+	|	OUTC '*' IDENTIFIER
+                {
+                  if (get_var_addr($3) == -1)
+		    {
+                      yyerror("Variable non déclarée");
+                      YYERROR;
+                    }
+                  else
+		    {
+                      pending_vars[n_pvar].addr = mem_pos + 1;
+                      pending_vars[n_pvar++].name = $3;
+                      mem[mem_pos] = 0xC2;
+                      mem_pos += 2;
+                    } }
+	|	OUTC '*' '%' address { mem[mem_pos++] = 0xD2;
+                                       mem[mem_pos++] = $4; }
+	|	OUTC '*' '%' IDENTIFIER
+                {
+                  if (get_var_addr($4) == -1)
+		    {
+                      yyerror("Variable non déclarée");
+                      YYERROR;
+                    }
+                  else
+		    {
+                      pending_vars[n_pvar].addr = mem_pos + 1;
+                      pending_vars[n_pvar++].name = $4;
+                      mem[mem_pos] = 0xD2;
                       mem_pos += 2;
                     } }
 	|	JUMP IDENTIFIER
@@ -665,37 +800,46 @@ op      :       ADD '#' number { mem[mem_pos++] = 0x20;
                       yyerror("Fonction non déclarée");
                       YYERROR;
                     }
-                  if (in_func)
+                 /* if (in_func)
   		    {
                       yyerror("Appel de fonction à l'intérieur d'une "
                               "fonction");
                       YYERROR;
-                    }
+                    }*/
                  /* if (get_var_addr("%ret") == -1)
 		    {
                       variables[n_var].name = "%ret";
                       variables[n_var++].addr = 0;
                     }*/
-                  mem[mem_pos] = 0x0; // LOAD
+/*                  mem[mem_pos] = 0x0; // LOAD
                   mem[mem_pos + 1] = mem_pos + 6;
-                  mem_pos += 2;
-                  mem[mem_pos++] = 0x5; // PUSH
-                  mem[mem_pos++] = 0; // Valeur quelconque.
-/*                  pending_vars[n_pvar].addr = mem_pos++;
+                  mem_pos += 2;*/
+                  mem[mem_pos++] = 0x7; // PUSH #
+                  mem[mem_pos] = mem_pos + 3;
+                  ++mem_pos;
+/*                pending_vars[n_pvar].addr = mem_pos++;
                   pending_vars[n_pvar++].name = "%ret";*/
-                  mem[mem_pos++] = 0x10; // JUMP
-                  //++stack_count;
-                  int addr = get_lab_addr($2);
-                  if (addr == -1)
+                  if (is_rom_func($2))
 		    {
-                      pending_labels[n_plab].lineno = lineno;
-                      pending_labels[n_plab].addr = mem_pos++;
-                      pending_labels[n_plab++].name = $2;
+                      mem[mem_pos++] = 0x13; // SJUMP
+                      mem[mem_pos++] = rom_func_addr($2);
                     }
                   else
 		    {
-                      mem[mem_pos++] = addr;
-                    } } 
+                      mem[mem_pos++] = 0x10; // JUMP
+                      int addr = get_lab_addr($2);
+                      if (addr == -1)
+		        {
+                          pending_labels[n_plab].lineno = lineno;
+                          pending_labels[n_plab].addr = mem_pos++;
+                          pending_labels[n_plab++].name = $2;
+                        }
+                      else
+		        {
+                          mem[mem_pos++] = addr;
+                        }
+                    } }
+                  //++stack_count; } 
 	|	RET
                 { if (!in_func)
   		    {
@@ -707,22 +851,30 @@ op      :       ADD '#' number { mem[mem_pos++] = 0x20;
                       variables[n_var].name = "%ret";
                       variables[n_var++].addr = 0;
                     }*/
-                  mem[mem_pos++] = 0x44; // POP
-                  mem[mem_pos] = mem_pos + 2;
-                  ++mem_pos; 
 /*                  pending_vars[n_pvar].addr = mem_pos++;
                   pending_vars[n_pvar++].name = "%ret";
                   mem[mem_pos++] = 0x48; // STORE
                   mem[mem_pos] = mem_pos + 2;
                   ++mem_pos;*/
-                  mem[mem_pos++] = 0x10; // JUMP
-                  mem[mem_pos++] = 0;
-                  in_func = 0;
+                  if (make_rom)
+		    {
+                      mem[mem_pos++] = 0x14; // SRET
+                      mem[mem_pos++] = 0;
+                    }
+                  else
+		    {
+                      mem[mem_pos++] = 0x44; // POP a
+                      mem[mem_pos] = mem_pos + 2;
+                      ++mem_pos;
+                      mem[mem_pos++] = 0x10; // JUMP
+                      mem[mem_pos++] = 0;
+                    }
+                  in_func = false;
                   //--stack_count;
                  }
 ;
 
-number : NUM { if ($1 > 127 || $1 < -128)
+number : NUM { if ($1 > 255 || $1 < -256)
 		 {
                    yyerror("Nombre de trop grande taille");
                    YYERROR;
@@ -733,7 +885,7 @@ number : NUM { if ($1 > 127 || $1 < -128)
                  } }
 ;
 
-address : NUM { if ($1 < 0 || $1 > 255)
+address : NUM { if ($1 < 0 || $1 > 511)
 		  {
                     yyerror("Adresse hors de la mémoire");
                     YYERROR;
@@ -751,14 +903,11 @@ int get_var_addr(char *varname)
 {
   for (int i = 0; i < n_var; ++i)
     {
-	/*if (variables[i].name == NULL)
+	if (variables[i].name == NULL)
 	{
-	  if (varname == NULL)
-	    {
-	      return variables[i].addr;
-	    }
+	  continue;
 	}
-	else*/ if (/*varname != NULL &&*/ !strcmp(varname, variables[i].name))
+	else if (!strcmp(varname, variables[i].name))
         {
 	  return variables[i].addr;
 	}
@@ -794,18 +943,46 @@ int label_exists(int addr)
   return 0;
 }
 
-/* Fonction qui renvoie 1 s'il existe une fonction ayant le nom donné en 
-   argument et 0 sinon.*/
-int func_exists(char *name)
+/* Fonction qui renvoie true s'il existe une fonction ayant le nom donné en 
+   argument et false sinon.*/
+bool func_exists(char *name)
 {
   for (int i = 0; i < n_func; ++i)
     {
       if (!strcmp(name, functions[i]))
 	{
-	  return 1;
+	  return true;
 	}
     }
-  return 0;
+  return false;
+}
+
+/* Renvoie true si le nom donné en argument correspond à une fonction de la
+   rom et false sinon. */
+bool is_rom_func(char *name)
+{
+  for (int i = 0; i < rf_count; ++i)
+    {
+      if (!strcmp(name, rom_funcs[i].name))
+	{
+	  return true;
+	}
+    }
+  return false;
+}
+
+/* Renvoie l'adresse de la rom correspondant à la fonction de la rom dont le 
+   nom est donné en argument. */
+int rom_func_addr(char *name)
+{
+  for (int i = 0; i < rf_count; ++i)
+    {
+      if (!strcmp(name, rom_funcs[i].name))
+	{
+	  return rom_funcs[i].addr;
+	}
+    }
+  return -1;
 }
 
 /* Fonction qui permet d'afficher des information sur une erreur syntaxique
@@ -845,7 +1022,12 @@ void fill_variables(void)
 {
   for (int i = 0; i < n_var; ++i)
     {
-      variables[i].addr = mem_pos++;
+      variables[i].addr = mem_pos;
+      if (variables[i].val_set)
+	{
+	  mem[mem_pos] = variables[i].val;
+	}
+      ++mem_pos;
     }
   for (int i = 0; i < n_pvar; ++i)
     {
@@ -867,7 +1049,15 @@ void print_prog(int start_addr, int mode)
     {
       if (mode == TEXT)
 	{
-	  printf("%02hhx ", mem[i]);
+	  int n = mem[i];
+	  if (n >= 0)
+	    {
+	      printf("%02x ", n);
+	    }
+	  else
+	    {
+              printf("%03x ", n + 512);
+	    }
 	  if (i%2 == mod)
 	    {
 	      puts("");
