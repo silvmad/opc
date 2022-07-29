@@ -23,41 +23,30 @@ expr expressions[MAX_EXPR];
 int n_expr = 0;
 bool recycle;
 
-// Pas besoin d'allocation dynamique étant donné la pile limitée à 256.
-/*void init_expr()
-{
-  expressions = calloc(sizeof(expr), MAX_EXPR);
-}
-
-void etendre_expr()
-{
-  expr * nouveau = calloc(sizeof(expr), max_expr + MAX_EXPR);
-  memcpy(nouveau, expressions, max_expr * sizeof(expr));
-  free(expressions);
-  expressions = nouveau;
-  max_expr += MAX_EXPR;
-  }*/
-
 expr* fairexpr(char *nom)
 {
   expr *e;
-  // TEST RECYCLE TOUTES EXPR
-  /*  if (nom == NULL)
-      {*/
-      for (int i = 0; i < n_expr; ++i)
+  //On essaye de recycler une expression libre avant d'en créer une nouvelle.
+  for (int i = 0; i < n_expr; ++i)
+    {
+      e = &expressions[i];
+      if (e->libre)
 	{
-	  e = &expressions[i];
-	  if (e->libre)
+	  e->nom = nom;
+	  e->libre = false;
+	  e->cst = false;
+	  e->glob = false;
+	  recycle = true;
+	  /* Si on a recyclé une position en dehors de l'espace local, 
+	     on ajuste l'espace local pour qu'il inclue cette position.
+	  */
+	  if (i < DEB_LOCAL)
 	    {
-	      e->nom = nom;
-	      e->libre = false;
-	      e->cst = false;
-	      e->glob = false;
-	      recycle = true;
-	      return e;
+	      DEB_LOCAL = i; 
 	    }
+	  return e;
 	}
-      //}
+    }
   e = &expressions[n_expr++];
   e->pos = position;
   e->nom = nom;
@@ -66,6 +55,14 @@ expr* fairexpr(char *nom)
   e->glob = false;
   position += incr;
   recycle = false;
+  return e;
+}
+
+expr* faire_cst_expr(int val)
+{
+  expr *e = calloc(sizeof(expr), 1);
+  e->cst = true;
+  e->pos = val;
   return e;
 }
 
@@ -80,14 +77,18 @@ expr * exprvar(char *nom)
 	  return e;
 	}
     }
-  fprintf(stderr, "%i : Erreur : variable non déclarée (%s)\n", lineno, nom);
+  //fprintf(stderr, "%i : Erreur : variable non déclarée (%s)\n", lineno, nom);
   return NULL;
 }
 
 /* libere  --  marque une expression comme libre */
 void libere(expr * e)
 {
-  if (e->nom == 0)
+  if (e->cst || e->litt || e->glob)
+    {
+      free(e);
+    }
+  else if (e->nom == 0)
     {
       e->libre = true; 
     }
@@ -115,6 +116,20 @@ void libere_variables_locales(int n)
 	}
     }
 }
+	 
+/* Permet de vérifier avant une définition de variable qu'une variable de ce
+   nom n'existe pas déjà dans l'espace de nom local. */
+bool loc_existe(char *nom)
+{
+  for(int i = DEB_LOCAL; i < n_expr; ++i)
+    {
+      if (expressions[i].nom && !strcmp(expressions[i].nom, nom))
+	{
+	  return true;
+	}
+    }
+  return false;
+}
 
 void incr_n_expr(int n)
 {
@@ -127,18 +142,4 @@ void incr_n_expr(int n)
 	}
     }
   n_expr += n;
-}
-	 
-/* Permet de vérifier avant une définition de variable qu'une variable de ce
-   nom n'existe pas déjà dans l'espace de nom local. */
-bool loc_existe(char *nom)
-{
-  for(int i = DEB_LOCAL; i < n_expr; ++i)
-    {
-      if (!strcmp(expressions[i].nom, nom))
-	{
-	  return true;
-	}
-    }
-  return false;
 }

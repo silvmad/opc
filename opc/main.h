@@ -17,11 +17,13 @@ en papier.
 
 #define MAX_FILENAME_SIZE 4096
 #define DEFAULT_OUTP_FILENAME "a.out"
-
+#define ASM_NAME "pasm"
+#define ASM_PATH "pasm/pasm"
+#define TMP_FILE "/tmp/temp.pasm"
 enum { S_OPT = 1, L_OPT = 2, B_OPT = 4, T_OPT = 8 };
 
 void usage(char*);
-void make_args(char**, int, char*, char*, char*, char*);
+void make_args(char**, int, char*, char*, char*);
 
 #endif
 

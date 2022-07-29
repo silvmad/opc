@@ -62,11 +62,12 @@ int main(int argc, char *argv[])
       usage(buffer);
     }
   
-  int ram[512];         // Mémoire + Pile
+  int ram[512] = { 0 };         // Mémoire + Pile
   unsigned int PC;      // Compteur de programme.
   int A;                // Accumulateur.
   int *stack = ram + 256;       // Pile.
-  int stack_count = 0;   // Compteur de pile.
+  stack[0] = -1;         // Adresse de retour de la fonction main.
+  int stack_count = 1;   // Compteur de pile.
   int rom[256];        // Mémoire en lecture seule contenant des fonctions. 
   PC = charger_hexcode(fichier, ram);
   charger_hexcode(rom_path, rom);
@@ -84,6 +85,10 @@ int main(int argc, char *argv[])
   // Boucle principale.
   while (1)
     {
+      if (PC > 255 || PC < 0)
+	{
+	  return A;
+	}
       op = mem_space == RAM ? ram[PC] : rom[PC];
       arg = mem_space == RAM ? ram[PC + 1] : rom[PC + 1];
       if (stepper)
@@ -91,6 +96,7 @@ int main(int argc, char *argv[])
       PC += 2;
       executer(&PC, &A, ram, stack, &stack_count, op, arg, &mem_space);
     }
+  return 0;
 }
 
 void usage(char *message)
@@ -175,10 +181,12 @@ op étant un unsigned char, les opcodes ont été traduits en décimal dans les
 case.
 */
 { 
-  char c;
+  //char c;
   switch (op)
     {
     case 0x0 : *A_pt = arg; break;                        // LOAD #
+    case 0x1 : printf("%i", arg); break;                  // OUT #
+    case 0x2 : printf("%c", arg); break;                  // OUTC #
     case 0x3 : *A_pt = 256 + *stack_count_pt - arg; break;   // LEA % 
     case 0x4 : *A_pt = stack[--(*stack_count_pt)]; break; // POP
     case 0x5 : stack[(*stack_count_pt)++] = *A_pt; break; // PUSH
@@ -199,10 +207,10 @@ case.
     case 0x21 : *A_pt -= arg; break;                      // SUB #
     case 0x22 : *A_pt = ~(*A_pt & arg); break;            // NAND #
     case 0x40 : *A_pt = ram[arg]; break;                  // LOAD a
-    case 0x41 : printf("out : %d\n", ram[arg]);           // OUT a
+    case 0x41 : printf("%d", ram[arg]);           // OUT a
       /*arrête la boucle d'exécution le temps pour l'utilisateur de voir la 
         sortie et vide le flux entrant */
-      while ((c = getchar() !='\n') && c != EOF) {}; break;
+      /*while ((c = getchar() !='\n') && c != EOF) {}; */break;
     case 0x42 : printf("%c", ram[arg]);           // OUTC a
       /*while ((c = getchar() !='\n') && c != EOF) {};*/ break;
     case 0x44 : ram[arg] = stack[--(*stack_count_pt)]; break; // POP a
@@ -213,8 +221,8 @@ case.
     case 0x61 : *A_pt -= ram[arg]; break;          // SUB a
     case 0x62 : *A_pt = ~(*A_pt & ram[arg]); break;// NAND a
     case 0x80 : *A_pt = stack[(*stack_count_pt) - arg]; break;  // LOAD %a
-    case 0x81 : printf("out : %d\n", stack[(*stack_count_pt) - arg]); 
-      while ((c = getchar() !='\n') && c != EOF) {}; break; // OUT %a
+    case 0x81 : printf("%i", stack[(*stack_count_pt) - arg]); 
+      /*while ((c = getchar() !='\n') && c != EOF) {}; */break; // OUT %a
     case 0x82 : printf("%c", stack[(*stack_count_pt) - arg]); 
       /*while ((c = getchar() !='\n') && c != EOF) {};*/ break; // OUTC %a
     case 0x88 : stack[(*stack_count_pt) - arg] = *A_pt; break;   // STORE %a
@@ -225,8 +233,8 @@ case.
     case 0xA2 : *A_pt = ~(*A_pt & stack[(*stack_count_pt) - arg]); // NAND %a
       break;
     case 0xC0 : *A_pt = ram[(unsigned int)ram[arg]]; break;      // LOAD *a
-    case 0xC1 : printf("out : %d\n", ram[(unsigned int)ram[arg]]);// OUT *a
-      while ((c = getchar() !='\n') && c != EOF) {}; break;
+    case 0xC1 : printf("%d", ram[(unsigned int)ram[arg]]);// OUT *a
+      /*while ((c = getchar() !='\n') && c != EOF) {}; */break;
     case 0xC2 : printf("%c", ram[(unsigned int)ram[arg]]);// OUTC *a
       /*while ((c = getchar() !='\n') && c != EOF) {};*/ break;
     case 0xC4 : ram[(unsigned int)ram[arg]] = stack[--(*stack_count_pt)];
@@ -238,9 +246,8 @@ case.
       break;
     case 0xD0 : *A_pt = ram[(unsigned int)stack[(*stack_count_pt) - arg]]; break;      // LOAD *%a
     case 0xD1 :                                                   // OUT *%a
-      printf("out : %d\n",
-	     ram[(unsigned int)stack[(*stack_count_pt) - arg]]);
-      while ((c = getchar() !='\n') && c != EOF) {}; break;
+      printf("%d", ram[(unsigned int)stack[(*stack_count_pt) - arg]]);
+      /*while ((c = getchar() !='\n') && c != EOF) {}; */break;
     case 0xD2 :                                                   // OUTC *%a
       printf("%c",
 	     ram[(unsigned int)stack[(*stack_count_pt) - arg]]);
@@ -260,7 +267,7 @@ case.
       break;                                                     // SUB *%a
     case 0xF2 :                                                  // NAND *%a
       *A_pt = ~(*A_pt & ram[(unsigned int)stack[(*stack_count_pt) - arg]]); 
-      break;    default : printf("ligne %x, op : %x\n", *PC_pt, op);
+      break;    default : printf("ligne %i, op : %x\n", *PC_pt, op);
       usage("Erreur : opcode inconnu."); break;
     }
 }
@@ -318,7 +325,7 @@ Renvoie le nombre entré par l'utilisateur.
   bool loop = true;
   do
     {
-      printf("in ? ");
+      //printf("in ? ");
       /* 
       On scanne 31 caractères pour le cas où l'utilisateur entre des zéros 
       non significatifs à gauche du nombre. S'il entre moins de 29 zéros non 
@@ -340,7 +347,7 @@ Renvoie le nombre entré par l'utilisateur.
     } while (loop);
   
   //c = (char) i;
-      puts("");
+  //puts("");
   return i;
 }
  
@@ -357,17 +364,28 @@ Elle propose ensuite à l'utilisateur d'entrer une commande.
   /*Variable qui conserve l'indice de la prochaine case libre dans le vecteur
     display */
   static int display_count = 0;
+  static bool display_stack = false;
   
   printf("A : %x (%i), PC : %x (%i)\n", A >= 0 ? A : A + 512, A, PC, PC);
+  if (display_stack)
+    {
+      printf("top ->  %x\n", ram[256 + stack_count - 1]);
+      for (int i = stack_count -1; i > 0; --i)
+	{
+	  int n = ram[256 + i - 1];
+	  n += n >= 0 ? 0 : 512;
+	  printf("\t%x\n", n);
+	}
+    }
   for (int i = 0; i < display_count; i++)
     printf("%x : %x\n", display[i], ram[display[i]]);
   print_instruction(op, arg, PC);
-  get_user_input(display, &display_count, ram, stack_count);
+  get_user_input(display, &display_count, &display_stack, ram, stack_count);
   puts("");
 }
 
-void get_user_input(unsigned int *display, int *display_count_pt, int *ram,
-		    int stack_count)
+void get_user_input(unsigned int *display, int *display_count_pt,
+		    bool *display_stack, int *ram, int stack_count)
 /*
 Fonction qui permet à l'utilisateur d'entrer une commande dans le stepper.
 Il peut entrer une commande ou appuyer sur entrée pour passer à l'instruction
@@ -380,12 +398,13 @@ suivante.
     {
       printf("(step) ? ");
       fgets(tampon, 1023, stdin);
-      parse_input(tampon, display, display_count_pt, ram, stack_count);
+      parse_input(tampon, display, display_count_pt, display_stack, ram,
+		  stack_count);
     }
 }
 
 void parse_input(char *tampon, unsigned int *display, int *display_count_pt,
-		 int *ram, int stack_count)
+		 bool *display_stack, int *ram, int stack_count)
 /*
 Fonction qui analyse les entrées de l'utilisateur lors du stepper et effectue
 le traitement adéquat.
@@ -396,7 +415,11 @@ le traitement adéquat.
     {
       char *suite = strtok(NULL, " ");
       //Si l'utilisateur a entré display [une adresse valide]
-      if (adresse(suite))
+      if (!strcmp(suite, "stack\n"))
+	{
+	  *display_stack = true;
+	}
+      else if (adresse(suite))
 	//On ajoute cette adresse au vecteur des adresse à afficher
 	display[(*display_count_pt)++] = strtol(suite, NULL, 16);
     }
@@ -500,13 +523,16 @@ Prend en argument deux long int correspondant à l'opcode et son argument.
   switch (op)
     {
     case 0x0 : printf("LOAD #%x : A <- %x\n", num_arg, num_arg); break;
+    case 0x1 : printf("OUT #%x : out <- %x\n", num_arg, num_arg); break;
+    case 0x2 : printf("OUTC #%x : out <- (char) %x\n", num_arg, num_arg);
+      break;
     case 0x3 : printf("LEA %%%x : A <- SP - %x\n", arg, arg); break;
     case 0x4 : printf("POP : A <- *(SP), SP--\n"); break;
     case 0x5 : printf("PUSH : *(SP) <- A, SP++\n"); break;
       //case 0x6 : printf("POP #%x : SP -= %x\n", arg, arg); break;
     case 0x7 : printf("PUSH #%x: *(SP) <- %x, SP++\n", num_arg, num_arg);
       break;
-    case 0x8 : printf("MSP  #%x : SP += %x\n", arg, arg); break;
+    case 0x8 : printf("MSP  #%x : SP += %x\n", num_arg, num_arg); break;
       //case 0x9 : printf("SPS  #%x : SP -= %x\n", arg, arg); break;
     case 0x10 : printf("JUMP %x : PC <- %x\n", arg, arg); break;
     case 0x11 : printf("BRN %x : if (A < 0) PC <- %x\n", arg, arg); break;
@@ -563,7 +589,7 @@ Prend en argument deux long int correspondant à l'opcode et son argument.
       break;
     case 0xF2 : printf("NAND *%x : A <- ~(A & *(*(SP - %x)))\n", arg, arg);
       break;
-    default : printf("ligne %x, op : %x", PC, op);
+    default : printf("ligne %i, op : %x", PC, op);
       usage("Erreur : opcode inconnu."); break;
     }
 }

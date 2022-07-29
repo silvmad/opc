@@ -7,3 +7,7 @@
 *.hexcode
 *.mic
 *.BAK
+*#
+a.out
+premier_test
+opc/opc

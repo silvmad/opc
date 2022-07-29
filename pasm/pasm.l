@@ -37,6 +37,8 @@ int lineno = 1;
 "OUT"                     { return OUT; }
 "OUTC"                    { return OUTC; }
 "POP"                     { return POP; }
+"MSP"                     { return MSP; }
+"LEA"                     { return LEA; }
 "PUSH"                    { return PUSH; }
 "JUMP"                    { return JUMP; }
 "BRN"                     { return BRN; }

@@ -42,13 +42,34 @@ int lineno = 1;
 ">="                      { return SUPEG; }
 "<="                      { return INFEG; }
 "fonc"                    { return FONC; }
-[\+\-\*/%=()\[\]{},><;!]       { return yytext[0]; }
+"affc"                    { return AFFC; }
+"affv"                    { return AFFV; }
+"entre"                   { return ENTRE; }
+[\+\-\*/%=()\[\]{},><;!]  { return yytext[0]; }
 [0-9]+                    { yylval.i = atoi(yytext); return NOMBRE; }
 [_a-zA-Z][_a-zA-Z0-9]*    { yylval.s = strdup(yytext);
                             return NOM; }
+\'(\\n|\\t|.)\'           {
+                            if (yytext[1] == '\\')
+	                    {
+				if(yytext[2] == 'n')
+				{
+				    yylval.i = '\n';
+				}
+				else
+				{
+				    yylval.i = '\t';
+				}
+			    }
+                            else
+			    {
+				yylval.i = yytext[1];
+			    }
+                            return CARAC;
+                          }
 \".*\"                    { char *string = yytext + 1;
-                            string[strlen(string) - 1] = 0;
-                            yylval.s = strdup(string);
-                            return CHAINE; }
+                               string[strlen(string) - 1] = 0;
+                               yylval.s = strdup(string);
+                               return CHAINE; }
 
 %%			

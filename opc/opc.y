@@ -28,20 +28,16 @@ int incr;
 int n_push = 0;
 
 char *globales[256];
-int n_glob;
+int glob_taille[256];
+int n_glob = 0;
 
 char *fonction;
 
  struct { char *ch; int lab; } ch_litt[256];
-int n_ch_litt;
+int n_ch_litt = 0;
 
 int deb_esp_loc[256] = { 0 };
 int n_esp_loc = 1;
-/*struct { int cond1_np; int cond2_np; } cond_mem[256];
-int cond_mem_count = -1;
-#define COND_MEM cond_mem[cond_mem_count]
-#define COND1_NP COND_MEM.cond1_np
-#define COND2_NP COND_MEM.cond2_np*/
 
 int if_np, else_np;
 int n_ifnp = 0, n_elnp = 0;
@@ -55,10 +51,9 @@ int n_ifnp = 0, n_elnp = 0;
     struct { int i; int np; } inp;
 }
 
-%token	<s>		NOM
-%token	<i>		NOMBRE
-%token	<s>		CHAINE
-%token SI SINON TANTQUE POUR VAR RETOUR ET OU EGAL INEG SUPEG INFEG FONC
+%token	<s>		NOM CHAINE
+%token	<i>		NOMBRE CARAC
+%token SI SINON TANTQUE POUR VAR RETOUR ET OU EGAL INEG SUPEG INFEG FONC AFFC AFFV ENTRE
 
 %type	<e>		expr affectation arg
 %type	<i>		args
@@ -105,6 +100,7 @@ glob_decl : VAR NOM ';'
 		    YYABORT;
 		  }
 		printf("globl %s\n", $2);
+		glob_taille[n_glob] = 1;
 		globales[n_glob++] = $2;
 	    }
 	|	VAR NOM '=' expr ';'
@@ -148,22 +144,27 @@ glob_decl : VAR NOM ';'
 		      {
 		        putchar('\0');
                       }
-                      putchar('"');
+                      printf("\"\n");
+		      glob_taille[n_glob] = $4;
                       globales[n_glob++] = $2; }
-	|	VAR NOM '[' ']' '=' CHAINE ';'
+/*	|	VAR NOM '[' ']' '=' CHAINE ';'
 		{   printf("globl %s \"%s\"", $2, $6);
-                    globales[n_glob++] = $2; }
+                    globales[n_glob++] = $2; }*/
 ;
 
 fonc : FONC NOM 
        {   printf("func %1$s\n%1$s:\n", $2);
            fonction = $2;
-           position = 1;
+           position = 2;
            incr = 1; }
        '(' list_decl_args ')' '{'
        {   position = 0; incr = -1; }
        listinstr '}'
-       {   printf("fin%s:\n\tRET\n", $2); n_expr = 0; n_push = 0; }
+       {
+	   printf("fin%s:\n\tMSP #%i\n\tRET\n", $2, -n_push);
+	   n_expr = 0;
+	   n_push = 0;
+       }
 ;
 
 list_decl_args :
@@ -174,76 +175,42 @@ list_decl_args :
 instr : ';'
 	|	'{'
                 {
-		    deb_esp_loc[n_esp_loc++] = n_expr;/*$<i>$ = n_expr;*/
+		    if (n_esp_loc > 255)
+		    {
+			yyerror("Erreur : nombre maximum d'espace locaux atteint.");
+			YYABORT;
+		    }
+		    deb_esp_loc[n_esp_loc++] = n_expr;
 		}
                 listinstr '}'
                 {
-		    /*libere_variables_locales($<i>2);*/
 		    libere_variables_locales(deb_esp_loc[--n_esp_loc]);
 		}
 	|	expr ';' { libere($1); }
 	|       si_debut instr %prec SI_SANS_SINON
                 {
-		    printf("sinon%i:\n", $1.i); 
-		    $1.np = n_push - $1.np;
-		    incr_n_expr(-$1.np);
-		    position += $1.np;
-		    n_push -= $1.np;
+		    printf("sinon%i:\n", $1.i);
+		    REMET_PILE_ETAT_ANT($1.np)
 		}
 	|	si_debut
 		instr SINON
  	        {
-		    /* Calcul du nombre de push de la première condition et 
-		       remise en état des variables des expressions  pour la 
-		       seconde condition. */
-		    /*COND1_NP = n_push - COND1_NP;
-		    incr_n_expr(-COND1_NP);
-		    position += COND1_NP;
-		    n_push -= COND1_NP;
-		    COND2_NP = n_push;*/
 		    $1.np = n_push - $1.np;
 		    incr_n_expr(-$1.np);
 		    position += $1.np;
 		    n_push -= $1.np;
 		    printf("\tMSP #%i\n", -$1.np);
-		    printf("\tJUMP eq%1$i\nsinon%1$i:\n", $1.i);
+		    $<i>$ = n_push;
+		    printf("\tJUMP fin%1$i\nsinon%1$i:\n", $1.i);
 		}
                 instr
                 {
-		    //COND2_NP = n_push - COND2_NP;
-		    $<inp>4.np = n_push - $<inp>4.np;
-		    int diff = $1.np - $<inp>4.np;
-		    //if (diff > 0)
-		      //{
-			printf("\tMSP #%i\n", diff);
-		      //}
-		    printf("JUMP fin%i\n", $1.i);
-		    //printf("eq%i:\n", $1);
-		    //if (diff < 0)
-		      //{
-			//printf("\tMSP #%i\n", diff);
-		      //}
-		    incr_n_expr(diff);
-		    position += diff;
-		    n_push += diff;
+		    $<i>4 = n_push - $<i>4;
+		    printf("\tMSP #%i\n", -$<i>4);
+		    incr_n_expr(-$<i>4);
+		    position += $<i>4;
+		    n_push += -$<i>4;
                     printf("fin%i:\n", $1.i);
-		    /* Si on a plusieurs conditions imbriquées, on 
-		       transfère le nombre de push à la condition du 
-		       dessus. INUTILE */ 
-                    /*if (cond_mem_count > 0)
-		      {
-			if (SUB_COND_MEM.cond2_np == -1)
-			  {
-                            SUB_COND_MEM.cond1_np +=
-				diff > 0 ? COND1_NP : COND2_NP;
-			  }
-			else
-			  {
-			    SUB_COND_MEM.cond2_np += 
-				diff > 0 ? COND1_NP : COND2_NP;
-			  }
-		      }*/
-		    //--cond_mem_count;
 		}
 	|	TANTQUE
                 { $<i>$ = n_push; }
@@ -251,69 +218,59 @@ instr : ';'
 		{ $<i>$  = label(); printf("deb%i:\n", $<i>$); }
                 expr
 		{
-		    printf("\tLOAD %%%i\n\tBRZ fin%i\n",
-			 $5->pos + n_push,
-			 $<i>4);
-		    libere($5);
+		  CHRG_EXPR($5);
+		  libere($5);
+		  REMET_PILE_ETAT_ANT($<i>2)
+		  printf("\tBRZ fin%i\n", $<i>4);
+		  $<i>$ = n_push;
 		}
                 ')' instr
 		{
-		  int tq_np = n_push - $<i>2;
-		  if (tq_np)
-		  {
-		      printf("\tMSP #%i\n", -tq_np);
-		      incr_n_expr(-tq_np);
-		      n_push -= tq_np;
-		      position += tq_np;
-		      printf("\tJUMP deb%1$i\nfin%1$i:", $<i>4);
-		  }
+                  REMET_PILE_ETAT_ANT($<i>6)
+		  printf("\tJUMP deb%1$i\nfin%1$i:\n", $<i>4);
 		}
 	|	POUR
-		{ $<i>$ = n_push; } 
+		{
+		  if (n_esp_loc > 255)
+		    {
+			yyerror("Erreur : nombre maximum d'espace locaux atteint.");
+			YYABORT;
+		    }
+		    deb_esp_loc[n_esp_loc++] = n_expr;
+		    $<i>$ = n_push;
+		} 
                 '(' pour_init ';'
 		{ printf("deb%i:\n", $<i>$ = label()); }
+		{ $<i>$ = n_push; }
                 expr ';'
 		{
-		    printf("\tLOAD %%%i\n\tBRZ fin%i\n",
-			   $7->pos + n_push,
-			   $<i>6);
-		    libere($7);
+		    CHRG_EXPR($8)
+		    libere($8);
+		    REMET_PILE_ETAT_ANT($<i>7);
+		    printf("\tBRZ fin%i\n", $<i>6);
 		    printf("\tJUMP corps%i\n", $<i>6); 
 		    printf("incr%i:\n", $<i>6);
 		    $<i>$ = n_push;
 		}
                 listexpr ')'
 		{
-		    int incr_np = n_push - $<i>9 ;
-                    if (incr_np)
-		    {
-			printf("\tMSP #%i\n", -incr_np);
-			incr_n_expr(-incr_np);
-			n_push -= incr_np;
-			position += incr_np; 
-		    }
+		    REMET_PILE_ETAT_ANT($<i>10);
 		    printf("\tJUMP deb%1$i\ncorps%1$i:\n", $<i>6);
 		    $<i>$ = n_push; 
 		}
                 instr
 		{
-		    int corps_np = n_push - $<i>12;
-		    if (corps_np)
-		    {
-			printf("\tMSP #%i\n", -corps_np);
-			incr_n_expr(-corps_np);
-			n_push -= corps_np;
-			position += corps_np;
-		    }
-		    printf("\tJUMP incr%1$i\nfin%1$i:", $<i>6);
-		    int pour_np = n_push - $<i>2;
+		    REMET_PILE_ETAT_ANT($<i>13);
+		    printf("\tJUMP incr%1$i\nfin%1$i:\n", $<i>6);
+		    /*int pour_np = n_push - $<i>2;
 		    if (pour_np)
 		    {
 			printf("\tMSP #%i\n", -pour_np);
 			incr_n_expr(-pour_np);
 			n_push -= pour_np;
 			position += pour_np;
-		    }
+		    }*/
+		    libere_variables_locales(deb_esp_loc[--n_esp_loc]); 
 		}
 	|	RETOUR expr ';'
 		{
@@ -328,7 +285,38 @@ instr : ';'
 		    printf("\tJUMP fin%s\n", fonction);
 		    libere($2);
 		}
+	|	RETOUR ';' { printf("\tJUMP fin%s\n", fonction); }
 	|	decl ';'
+	|	AFFC '(' expr ')' ';'
+		{
+		    if ($3->cst)
+		    {
+			printf("\tOUTC #%i\n", $3->pos);
+		    }
+		    else if ($3->glob)
+		    {
+			printf("\tOUTC %s\n", $3->nom);	
+		    }
+		    else
+		    {
+			printf("\tOUTC %%%i\n", $3->pos + n_push);	
+		    }
+		}
+	|	AFFV '(' expr ')' ';'
+		{
+		    if ($3->cst)
+		    {
+			printf("\tOUT #%i\n", $3->pos);
+		    }
+		    else if ($3->glob)
+		    {
+			printf("\tOUT %s\n", $3->nom);	
+		    }
+		    else
+		    {
+			printf("\tOUT %%%i\n", $3->pos + n_push);	
+		    }
+		}
 ;
 
 listinstr :
@@ -339,15 +327,10 @@ listinstr :
 si_debut : SI '(' expr ')'
 	   {
 	       $$.i = label();
-	       printf("\tLOAD %%%i\n\tBRZ sinon%i\n", $3->pos + n_push, $<i>$);
+	       CHRG_EXPR($3);
 	       libere($3);
+	       printf("\tBRZ sinon%i\n", $$.i);
 	       $$.np = n_push;
-	       //++cond_mem_count;
-               //COND1_NP = n_push;
-	       /* Permet de signaler qu'on est dans la première condition au 
-                  cas ou on entre dans une autre condition avant la fin de
-		  celle-ci */
-	       //COND2_NP = -1;
 	   }
 ;
 
@@ -371,6 +354,23 @@ nom_ou_init : NOM
 			YYERROR;
 		      }
 		    fairexpr($1);
+		}
+	|	NOM '[' NOMBRE ']'
+	        {
+		    if (loc_existe($1))
+		      {
+			yyerror("Erreur : variable déclarée deux fois");
+			YYERROR;
+		      }
+		    expr *e = fairexpr($1);
+		    e->tab = true;
+		    e->taille = $3;
+                    for (int i = 1; i < $3; ++i)
+		    {
+			fairexpr(NULL);
+		    }
+		    printf("\tMSP #%i\n", $3);
+		    n_push += $3;
 		}
 	|	NOM 
 		{
@@ -421,12 +421,13 @@ affect_list : affectation { libere($1); }
 affectation : NOM '=' expr
 	      {
 		  expr *e1;
-		  if ((e1 = exprvar($1)))
+		  /*if ((e1 = exprvar($1)))
 		    {
 		      if ($3->cst)
 		        {
 		          printf("\tLOAD #%i\n\tSTORE %%%i\n",
 			         $3->pos, e1->pos + n_push);
+			  $$ = faire_cst_expr($3->pos);
 		        }
 		      else
 		        {
@@ -440,21 +441,89 @@ affectation : NOM '=' expr
 		      if ($3->cst)
 		        {
 		          printf("\tLOAD #%i\n\tSTORE %s\n",
-			         $3->pos, e1->nom);
+			         $3->pos, $1);
+			  $$ = faire_cst_expr($3->pos);
 		        }
-		      else
-		        {
+		      else		        {
 		          printf("\tLOAD %%%i\n", $3->pos + n_push);
-		          printf("\tSTORE %s\n", e1->nom);
+		          printf("\tSTORE %s\n", $1);
 		          $$ = $3;
 			}
-		    }
+		    }*/
+		  $$ = $3;
+		  CHRG_EXPR($3)
+		  int i;
+		  if ((e1 = exprvar($1)))
+		  {
+		      if (e1->tab)
+		      {
+			  yyerror("Impossible d'affecter une valeur à un "
+				  "tableau comme cela. Utilisez les "
+				  "crochets.");
+			  YYERROR;
+		      }
+
+		      printf("\tSTORE %%%i\n", e1->pos + n_push);
+		  }
+		  else if ((i = glob_existe($1)))
+		  {
+		      if (glob_taille[i] != 1)
+		      {
+			  yyerror("Impossible d'affecter une valeur à un "
+				  "tableau comme cela. Utilisez les "
+				  "crochets.");
+			  YYERROR;
+		      }
+		      printf("\tSTORE %s\n", $1);
+		  }
 		  else
-		    {
+		  {
 		      yyerror("Variable non déclarée");
 		      YYERROR;
-		    }
+		  }
 	      }
+	|	NOM '[' expr ']' '=' expr
+		{
+		  expr *e1;
+		  $$ = $6;
+		  int i;
+		  if ((e1 = exprvar($1)))
+		  {
+		      if (!e1->tab)
+		      {
+			  yyerror("Impossible d'indexer une variable qui "
+				  "n'est pas un tableau");
+			  YYERROR;
+		      }
+		      printf("\tLEA %%%i\n", e1->pos + n_push);
+		      OP_EXPR("ADD", $3);// PLUTOT SUB ?
+		      libere($3);
+		      printf("\tPUSH\n"); 
+		      ++n_push;
+		  }
+		  else if ((i = glob_existe($1)))
+		  {
+		      if (glob_taille[i] <= 1)
+		      {
+			  yyerror("Impossible d'indexer une variable qui "
+				  "n'est pas un tableau");
+			  YYERROR;
+		      }
+		      printf("\tLOAD #%s\n", $1);
+		      OP_EXPR("ADD", $3);// PLUTOT SUB ?
+		      libere($3);
+		      printf("\tPUSH\n"); 
+		      ++n_push;
+		  }
+		  else
+		  {
+		      yyerror("Variable non déclarée");
+		      YYERROR;
+		  }
+		  CHRG_EXPR($6);
+		  printf("\tSTORE *%%1\n\tMSP #-1\n");
+		  --n_push;
+		}   
 ;
 
 expr : NOM
@@ -479,19 +548,22 @@ expr : NOM
 	|	'(' expr ')' { $$ = $2; }
 	|	NOMBRE
                 {
-		    $$ = calloc(sizeof(expr), 1);//fairexpr(NULL);
+		    $$ = calloc(sizeof(expr), 1);
 		    $$->cst = true;
-		    $$->pos = $1;/*
-		    if (recycle)
-		      {
-			printf("\tLOAD #%i\n", $1);
-			printf("\tSTORE %%%i\n", $$->pos + n_push);
-		      }
-		    else
-		      {
-			printf("\tPUSH #%i\n", $1);
-			++n_push;
-		      }*/
+		    $$->pos = $1;
+		}
+	|	CARAC
+                {
+		    if ((!strchr(ASCII_PRINTABLE, $1)) &&
+			$1 != '\n' &&
+			$1 != '\t')
+		    {
+			yyerror("Caractère ne faisant pas partie des caractères ascii imprimables");
+			YYERROR;
+		    }
+		    $$ = calloc(sizeof(expr), 1);
+		    $$->cst = true;
+		    $$->pos = $1;
 		}
 	|       affectation
 	|	NOM '(' args ')'
@@ -513,9 +585,48 @@ expr : NOM
 			++n_push;
 		      }
 		}
-/*	|	NOM '[' expr ']'
+	|	NOM '[' expr ']'
 		{
-		    if ($3->cst)
+		  expr *e1;
+		  int i;
+		  if ((e1 = exprvar($1)))
+		  {
+		      if (!e1->tab)
+		      {
+			  yyerror("Impossible d'indexer une variable qui "
+				  "n'est pas un tableau");
+			  YYERROR;
+		      }
+		      printf("\tLEA %%%i\n", e1->pos + n_push);
+		      OP_EXPR("ADD", $3);// PLUTOT SUB ?
+		      libere($3);
+		      printf("\tPUSH\n"); 
+		      ++n_push;
+		  }
+		  else if ((i = glob_existe($1)))
+		  {
+		      if (glob_taille[i] <= 1)
+		      {
+			  yyerror("Impossible d'indexer une variable qui "
+				  "n'est pas un tableau");
+			  YYERROR;
+		      }
+		      printf("\tLOAD #%s\n", $1);
+		      OP_EXPR("ADD", $3);
+		      libere($3);
+		      printf("\tPUSH\n"); 
+		      ++n_push;
+		  }
+		  else
+		  {
+		      yyerror("Variable non déclarée");
+		      YYERROR;
+		  }
+		  printf("\tLOAD *%%1\n\tMSP #-1\n");
+		  --n_push;
+		  STCK_EXPR($$);
+		}   
+		    /*if ($3->cst)
 		      {
 			int n = $3->pos;
 			libere($3);
@@ -542,8 +653,8 @@ expr : NOM
 			
 			printf("\tPUSH\n\tLOAD *%%1\n\tSTORE %%%i\n");
 			++n_push;
-		    libere($3);
-		}*/
+		    libere($3);*/
+		
 	|	'-' expr %prec FORT
 		{
 		    if ($2->cst)
@@ -568,112 +679,62 @@ expr : NOM
 		}
 	|	expr '+' expr
 		{
-		    int p1 = $1->pos, p3 = $3->pos;
-		    bool c1 = $1->cst, c3 = $3->cst;
-		    libere($1);
-		    libere($3);
-		    $$ = op_add_sub("ADD", p1, c1, p3, c3);
+		    $$ = op_add_sub("ADD", $1, $3);
                 }   
 	|	expr '-' expr
                 {
-		    int p1 = $1->pos, p3 = $3->pos;
-		    bool c1 = $1->cst, c3 = $3->cst;
-		    libere($1);
-		    libere($3);
-                    $$ = op_add_sub("SUB", p1, c1, p3, c3);
+                    $$ = op_add_sub("SUB", $1, $3);
                 }   
 	|	expr '*' expr
 		{
-		    int p1 = $1->pos, p3 = $3->pos;
-		    bool c1 = $1->cst, c3 = $3->cst;
-		    libere($1);
-		    libere($3);
-                    $$ = op_mult_div_mod("mult", p1, c1, p3, c3);
+                    $$ = op_mult_div_mod("mult", $1, $3);
 		}
 	|	expr '/' expr
 		{
-		    int p1 = $1->pos, p3 = $3->pos;
-		    bool c1 = $1->cst, c3 = $3->cst;
-		    libere($1);
-		    libere($3);
-                    $$ = op_mult_div_mod("div", p1, c1, p3, c3);
+                    $$ = op_mult_div_mod("div", $1, $3);
 		}
 	|	expr '%' expr
 		{
-		    int p1 = $1->pos, p3 = $3->pos;
-		    bool c1 = $1->cst, c3 = $3->cst;
-		    libere($1);
-		    libere($3);
-                    $$ = op_mult_div_mod("mod", p1, c1, p3, c3);
+                    $$ = op_mult_div_mod("mod", $1, $3);
 		}
 	|	expr ET expr
 		{
 		    if (($1->cst && $1->pos == 0) ||
 			($3->cst && $3->pos == 0))
 		    {
+			$$ = faire_cst_expr(0);
 			printf("\tLOAD #0\n");
+
 		    }
 		    else if ($1->cst && $3->cst)
 		    {
+			$$ = faire_cst_expr(1);
 			printf("\tLOAD #1\n");
 		    }
 		    else if ($1->cst)
 		    {
-			if ($3->glob)
-			{
-			    printf("\tLOAD %s\n", $3->nom);
-			}
-			else 
-			{
-			    printf("\tLOAD %%%i\n", $3->pos + n_push);
-			}
+			CHRG_EXPR_NON_CST($3);
+			libere($3);
+			STCK_EXPR($$)
 		    }
 		    else if ($3->cst)
 		    {
-			if ($1->glob)
-			{
-			    printf("\tLOAD %s\n", $1->nom);
-			}
-			else 
-			{
-			    printf("\tLOAD %%%i\n", $1->pos + n_push);
-			}
+			CHRG_EXPR_NON_CST($1);
+			libere($1);
+			STCK_EXPR($$)
 		    }
 		    else
 		    {
-			if ($1->glob)
-			{
-			    printf("\tLOAD %s\n", $1->nom);
-			}
-			else 
-			{
-			    printf("\tLOAD %%%i\n", $1->pos + n_push);
-			}
-			int lab = label();
-			printf("\tBRZ else%i\n", lab);
-			if ($3->glob)
-			{
-			    printf("\tLOAD %s\n", $3->nom);
-			}
-			else 
-			{
-			    printf("\tLOAD %%%i\n", $3->pos + n_push);
-			}
-			printf("\tBRZ else%i\n", lab);
-			printf("\tLOAD #1\n\tJUMP end%i\n", lab);
-			printf("else%1$i\n\tLOAD #0\nend%1$i\n", lab);
+			CHRG_EXPR_NON_CST($1);
 			libere($1);
+			int lab = label();
+			printf("\tBRZ sinon%i\n", lab);
+			CHRG_EXPR_NON_CST($3)
 			libere($3);
-			$$ = fairexpr(NULL);
-		        if (recycle)
-		        {
-			    printf("\tSTORE %%%i\n", $$->pos + n_push);
-		        }
-		        else
-		        {
-			    printf("\tPUSH\n");
-			    ++n_push;
-		        }
+			printf("\tBRZ sinon%i\n", lab);
+			printf("\tLOAD #1\n\tJUMP end%i\n", lab);
+			printf("sinon%1$i:\n\tLOAD #0\nend%1$i:\n", lab);
+			STCK_EXPR($$)
 		    }
 		}
 	|	expr OU expr
@@ -681,71 +742,40 @@ expr : NOM
 		    if (($1->cst && $1->pos != 0) ||
 			($3->cst && $3->pos != 0))
 		    {
+			$$ = faire_cst_expr(1);
 			printf("\tLOAD #1\n");
 		    }
 		    else if ($1->cst && $3->cst)
 		    {
+			$$ = faire_cst_expr(0);
 			printf("\tLOAD #0\n");
 		    }
 		    else if ($1->cst)
 		    {
-			if ($3->glob)
-			{
-			    printf("\tLOAD %s\n", $3->nom);
-			}
-			else 
-			{
-			    printf("\tLOAD %%%i\n", $3->pos + n_push);
-			}
+			CHRG_EXPR_NON_CST($1)
+			libere($1);
+			STCK_EXPR($$)
 		    }
 		    else if ($3->cst)
 		    {
-			if ($1->glob)
-			{
-			    printf("\tLOAD %s\n", $1->nom);
-			}
-			else 
-			{
-			    printf("\tLOAD %%%i\n", $1->pos + n_push);
-			}
+			CHRG_EXPR_NON_CST($3)
+			libere($3);
+			STCK_EXPR($$)
 		    }
 		    else
 		    {
-			if ($1->glob)
-			{
-			    printf("\tLOAD %s\n", $1->nom);
-			}
-			else 
-			{
-			    printf("\tLOAD %%%i\n", $1->pos + n_push);
-			}
-			int lab = label();
-			printf("\tBRZ else%1$i-1\n\tJUMP end%1$i\n"
-			       "else%1$i-1:\n", lab);
-			if ($3->glob)
-			{
-			    printf("\tLOAD %s\n", $3->nom);
-			}
-			else 
-			{
-			    printf("\tLOAD %%%i\n", $3->pos + n_push);
-			}
-			printf("\tBRZ else%1$i-2\n\tJUMP end%1$i\n"
-			       "else%1$i-2:\n", lab);
-			printf("\tLOAD #0\n\tJUMP end%i\n", lab);
-			printf("else%1$i:\n\tLOAD #1\nend%1$i\n", lab);
+			CHRG_EXPR_NON_CST($1)
 			libere($1);
+			int lab = label();
+			printf("\tBRZ sinon%1$i_1\n\tJUMP end%1$i\n"
+			       "sinon%1$i_1:\n", lab);
+			CHRG_EXPR_NON_CST($3)
 			libere($3);
-			$$ = fairexpr(NULL);
-		        if (recycle)
-		        {
-			    printf("\tSTORE %%%i\n", $$->pos + n_push);
-		        }
-		        else
-		        {
-			    printf("\tPUSH\n");
-			    ++n_push;
-		        }
+			printf("\tBRZ sinon%1$i_2\n\tJUMP end%1$i\n"
+			       "sinon%1$i_2:\n", lab);
+			printf("\tLOAD #0\n\tJUMP end%i\n", lab);
+			printf("sinon%1$i:\n\tLOAD #1\nend%1$i:\n", lab);
+			STCK_EXPR($$)
 		    }
 		}
 	|	'!' expr %prec FORT
@@ -755,281 +785,92 @@ expr : NOM
 			$2->pos = $2->pos == 0 ? 1 : 0;
 			$$ = $2;
 		    }
-		    else if ($2->glob)
-		    {
-		        printf("\tLOAD %s\n", $2->nom);
-		    }
 		    else
 		    {
-			printf("\tLOAD %%%i\n", $2->pos + n_push);
+			CHRG_EXPR_NON_CST($2)
+			libere($2);
 		    }
 		    int lab = label();
-		    printf("\tBRZ else%i\n\tLOAD #0\n", lab);
-		    printf("\tJUMP end%1$i\nelse%1$i:\nLOAD #1\nend%1$i\n",
+		    printf("\tBRZ sinon%i\n\tLOAD #0\n", lab);
+		    printf("\tJUMP end%1$i\nsinon%1$i:\nLOAD #1\nend%1$i:\n",
 			   lab);
-		    libere($2);
-		    $$ = fairexpr(NULL);
-		    if (recycle)
-		    {
-			printf("\tSTORE %%%i\n", $$->pos + n_push);
-		    }
-		    else
-		    {
-			printf("\tPUSH\n");
-			++n_push;
-		    }
+		    STCK_EXPR($$)
 		}
 	|	expr EGAL expr
 	        {
-		    if ($1->cst)
-		    {
-			printf("\tLOAD #%i\n", $1->pos);
-		    }
-		    else if ($1->glob)
-		    {
-			printf("\tLOAD %s\n", $1->nom);
-		    }
-		    else
-		    {
-			printf("\tLOAD %%%i\n",$1->pos + n_push);
-		    }
-		    if ($3->cst)
-		    {
-			printf("\tSUB #%i\n", $3->pos);
-		    }
-		    else if ($3->glob)
-		    {
-			printf("\tSUB %s\n", $3->nom);
-		    }
-		    else
-		    {
-			printf("\tSUB %%%i\n", $3->pos + n_push);
-		    }
-		    int lab = label();
-		    printf("\tBRZ else%1$i\n\tLOAD #0\n\tJUMP end%1$i", lab);
-		    printf("else%1$i:\n\tLOAD #1\nend%1$i:\n", lab);
+		    CHRG_EXPR($1);
 		    libere($1);
+		    OP_EXPR("SUB", $3);
 		    libere($3);
-		    $$ = fairexpr(NULL);
-		    if (recycle)
-		    {
-			printf("\tSTORE %%%i\n", $$->pos + n_push);
-		    }
-		    else
-		    {
-			printf("\tPUSH\n");
-			++n_push;
-		    }
+		    int lab = label();
+		    printf("\tBRZ sinon%1$i\n\tLOAD #0\n\tJUMP end%1$i\n", lab);
+		    printf("sinon%1$i:\n\tLOAD #1\nend%1$i:\n", lab);
+		    STCK_EXPR($$)
 		}
 	|	expr INEG expr
 		{
-		    if ($1->cst)
-		    {
-			printf("\tLOAD #%i\n", $1->pos);
-		    }
-		    else if ($1->glob)
-		    {
-			printf("\tLOAD %s\n", $1->nom);
-		    }
-		    else
-		    {
-			printf("\tLOAD %%%i\n",$1->pos + n_push);
-		    }
-		    if ($3->cst)
-		    {
-			printf("\tSUB #%i\n", $3->pos);
-		    }
-		    else if ($3->glob)
-		    {
-			printf("\tSUB %s\n", $3->nom);
-		    }
-		    else
-		    {
-			printf("\tSUB %%%i\n", $3->pos + n_push);
-		    }
+		    CHRG_EXPR($1);
 		    libere($1);
+		    OP_EXPR("SUB", $3);
 		    libere($3);
-		    $$ = fairexpr(NULL);
-		    if (recycle)
-		    {
-			printf("\tSTORE %%%i\n", $$->pos + n_push);
-		    }
-		    else
-		    {
-			printf("\tPUSH\n");
-			++n_push;
-		    }
+		    STCK_EXPR($$);
 		}
 	|	expr '>' expr
 		{
-		    if ($1->cst)
-		    {
-			printf("\tLOAD #%i\n", $1->pos);
-		    }
-		    else if ($1->glob)
-		    {
-			printf("\tLOAD %s\n", $1->nom);
-		    }
-		    else
-		    {
-			printf("\tLOAD %%%i\n",$1->pos + n_push);
-		    }
-		    if ($3->cst)
-		    {
-			printf("\tSUB #%i\n", $3->pos);
-		    }
-		    else if ($3->glob)
-		    {
-			printf("\tSUB %s\n", $3->nom);
-		    }
-		    else
-		    {
-			printf("\tSUB %%%i\n", $3->pos + n_push);
-		    }
-		    int lab = label();
-		    printf("\tBRN else%1$i\n\tBRZ else%1$i\tLOAD #1\n"
-			   "\tJUMP end%1$i", lab);
-		    printf("else%1$i:\n\tLOAD #0\nend%1$i:\n", lab);
+		    CHRG_EXPR($1);
 		    libere($1);
+		    OP_EXPR("SUB", $3);
 		    libere($3);
-		    $$ = fairexpr(NULL);
-		    if (recycle)
-		    {
-			printf("\tSTORE %%%i\n", $$->pos + n_push);
-		    }
-		    else
-		    {
-			printf("\tPUSH\n");
-			++n_push;
-		    }
+		    int lab = label();
+		    printf("\tBRN sinon%1$i\n\tBRZ sinon%1$i\n\tLOAD #1\n"
+			   "\tJUMP end%1$i\n", lab);
+		    printf("sinon%1$i:\n\tLOAD #0\nend%1$i:\n", lab);
+		    STCK_EXPR($$)
 		}
 	|	expr '<' expr
 		{
-		    if ($1->cst)
-		    {
-			printf("\tLOAD #%i\n", $1->pos);
-		    }
-		    else if ($1->glob)
-		    {
-			printf("\tLOAD %s\n", $1->nom);
-		    }
-		    else
-		    {
-			printf("\tLOAD %%%i\n",$1->pos + n_push);
-		    }
-		    if ($3->cst)
-		    {
-			printf("\tSUB #%i\n", $3->pos);
-		    }
-		    else if ($3->glob)
-		    {
-			printf("\tSUB %s\n", $3->nom);
-		    }
-		    else
-		    {
-			printf("\tSUB %%%i\n", $3->pos + n_push);
-		    }
-		    int lab = label();
-		    printf("\tBRN else%1$i\n\tLOAD #0\n\tJUMP end%1$i\n",
-			   lab);
-		    printf("else%1$i:\n\tLOAD #1\nend%1$i:\n", lab);
+		    CHRG_EXPR($1);
 		    libere($1);
+		    OP_EXPR("SUB", $3);
 		    libere($3);
-		    $$ = fairexpr(NULL);
-		    if (recycle)
-		    {
-			printf("\tSTORE %%%i\n", $$->pos + n_push);
-		    }
-		    else
-		    {
-			printf("\tPUSH\n");
-			++n_push;
-		    }
+		    int lab = label();
+		    printf("\tBRN sinon%1$i\n\tLOAD #0\n\tJUMP end%1$i\n",
+			   lab);
+		    printf("sinon%1$i:\n\tLOAD #1\nend%1$i:\n", lab);
+		    STCK_EXPR($$)
 		}
 	|	expr SUPEG expr
 		{
-		    if ($1->cst)
-		    {
-			printf("\tLOAD #%i\n", $1->pos);
-		    }
-		    else if ($1->glob)
-		    {
-			printf("\tLOAD %s\n", $1->nom);
-		    }
-		    else
-		    {
-			printf("\tLOAD %%%i\n",$1->pos + n_push);
-		    }
-		    if ($3->cst)
-		    {
-			printf("\tSUB #%i\n", $3->pos);
-		    }
-		    else if ($3->glob)
-		    {
-			printf("\tSUB %s\n", $3->nom);
-		    }
-		    else
-		    {
-			printf("\tSUB %%%i\n", $3->pos + n_push);
-		    }
-		    int lab = label();
-		    printf("\tBRN else%1$i\n\tLOAD #1\n\tJUMP end%1$i", lab);
-		    printf("else%1$i:\n\tLOAD #0\nend%1$i:\n", lab);
+		    CHRG_EXPR($1);
 		    libere($1);
+		    OP_EXPR("SUB", $3);
 		    libere($3);
-		    $$ = fairexpr(NULL);
-		    if (recycle)
-		    {
-			printf("\tSTORE %%%i\n", $$->pos + n_push);
-		    }
-		    else
-		    {
-			printf("\tPUSH\n");
-			++n_push;
-		    }
+		    int lab = label();
+		    printf("\tBRN sinon%1$i\n\tLOAD #1\n\tJUMP end%1$i\n", lab);
+		    printf("sinon%1$i:\n\tLOAD #0\nend%1$i:\n", lab);
+		    STCK_EXPR($$);
 		}
 	|	expr INFEG expr
 		{
-		    if ($1->cst)
-		    {
-			printf("\tLOAD #%i\n", $1->pos);
-		    }
-		    else if ($1->glob)
-		    {
-			printf("\tLOAD %s\n", $1->nom);
-		    }
-		    else
-		    {
-			printf("\tLOAD %%%i\n",$1->pos + n_push);
-		    }
-		    if ($3->cst)
-		    {
-			printf("\tSUB #%i\n", $3->pos);
-		    }
-		    else if ($3->glob)
-		    {
-			printf("\tSUB %s\n", $3->nom);
-		    }
-		    else
-		    {
-			printf("\tSUB %%%i\n", $3->pos + n_push);
-		    }
-		    int lab = label();
-		    printf("\tBRN else%1$i\n\tBRZ else%1$i\n\tLOAD #1\n"
-			   "\tJUMP end%1$i", lab);
-		    printf("else%1$i:\n\tLOAD #0\nend%1$i:\n", lab);
+		    CHRG_EXPR($1);
 		    libere($1);
+		    OP_EXPR("SUB", $3);
 		    libere($3);
+		    int lab = label();
+		    printf("\tBRN sinon%1$i\n\tBRZ sinon%1$i\n\tLOAD #0\n"
+			   "\tJUMP end%1$i\n", lab);
+		    printf("sinon%1$i:\n\tLOAD #1\nend%1$i:\n", lab);
+		    STCK_EXPR($$);
+		}
+	|	ENTRE '(' ')'
+		{
 		    $$ = fairexpr(NULL);
-		    if (recycle)
-		    {
-			printf("\tSTORE %%%i\n", $$->pos + n_push);
-		    }
-		    else
+		    if (!recycle)
 		    {
 			printf("\tPUSH\n");
 			++n_push;
 		    }
+		    printf("\tIN %%%i\n", $$->pos + n_push);
 		}
 ;
 
@@ -1041,47 +882,14 @@ args : { $$ = 0; }
 	|	arg
                   {
 		    $$ = 1;
-                    if ($1->litt)
-	              {
-		        printf("\tPUSH #%s\n", $1->nom);
-	                
-                      }
-                    else if ($1->cst)
-  		      {
-		        printf("\tPUSH #%i\n", $1->pos);
-                      }
-                    else if ($1->glob)
-  		      {
-		        printf("\tPUSH %s\n", $1->nom);
-                      }
-                    else
-  		      {
-		        printf("\tLOAD %%%i\n\tPUSH\n", $1->pos + n_push);
-                      }
+		    PUSH_ARG($1)
 		    ++n_push;
-		    libere($1);
 		  }
 	|       arg ',' args
                   {
 		    $$ = $3 + 1;
-                    if ($1->litt)
-	              {
-		        printf("\tPUSH #%s\n", $1->nom);
-                      }
-                    else if ($1->cst)
-  		      {
-		        printf("\tPUSH #%i\n", $1->pos);
-                      }
-                    else if ($1->glob)
-  		      {
-		        printf("\tPUSH %s\n", $1->nom);
-                      }
-                    else
-  		      {
-		        printf("\tLOAD %%%i\n\tPUSH\n", $1->pos + n_push);
-                      }
+		    PUSH_ARG($1)
 		    ++n_push;
-		    libere($1);
 		  }
 ;
 
@@ -1099,6 +907,8 @@ arg : expr { $$ = $1; }
 				    "tiendra pas en mémoire");
 			    YYABORT;
 			  }
+			ch_litt[n_ch_litt].ch = $1;
+			ch_litt[n_ch_litt].lab = n_ch_litt;
 		        printf("globl ch%i \"%s\"\n", n_ch_litt, $1);
 			sprintf(nom_ch, "ch%i", n_ch_litt++);
 			globales[n_glob++] = nom_ch;
@@ -1124,77 +934,54 @@ void yyerror(char *msg)
     fprintf(stderr, "%i: %s : %s\n", lineno, msg, yytext);
 }
 
-expr* op_add_sub(char *op, int a1, bool c1, int a2,  bool c2)
+expr* op_add_sub(char *op, expr *e1, expr *e2)
 {
   expr *e;
-  if (c1 && c2)
+  if (e1->cst && e2->cst)
     {
-      e = calloc(sizeof(expr), 1);
       if (!strcmp(op, "ADD"))
 	{
-	  e->pos = a1 + a2;
+	  e = faire_cst_expr(e1->pos + e2->pos);
 	}
       else
 	{
-	  e->pos = a1 - a2;
+	  e = faire_cst_expr(e1->pos - e2->pos);
 	}
-      e->cst = true;
+      free(e1);
+      free(e2);
     }
   else
     {
-      e = fairexpr(NULL);
-      if (c1)
-	{
-	  printf("\tLOAD #%i\n", a1);
-	}
-      else
-	{
-	  printf("\tLOAD %%%i\n", a1 + n_push);
-	}
-      if (c2)
-	{
-	  printf("\t%s #%i\n", op, a2);
-	}
-      else
-	{
-	    printf("\t%s %%%i\n", op, a2 + n_push);
-	}
-      if (recycle)
-	{
-	  printf("\tSTORE %%%i\n", e->pos + n_push);
-	}
-      else
-	{
-	  printf("\tPUSH\n");
-	  n_push++;
-	}
+      CHRG_EXPR(e1);
+      libere(e1);
+      OP_EXPR(op, e2);
+      libere(e2);
+      STCK_EXPR(e);
     }
   return e;
 }
 
-expr* op_mult_div_mod(char *op, int a1, bool c1, int a2, bool c2)
+expr* op_mult_div_mod(char *op, expr *e1, expr *e2)
 {
   expr *e;
-  if (c1 && c2)
+  if (e1->cst && e2->cst)
     {
-      e = calloc(sizeof(expr), 1);
       if (!strcmp(op, "mult"))
 	{
-	  e->pos = a1 * a2;
+	  e = faire_cst_expr(e1->pos * e2->pos);
 	}
       else if (!strcmp(op, "div"))
 	{
-	  e->pos = a1 / a2;
+	  e = faire_cst_expr(e1->pos / e2->pos);
 	}
       else
 	{
-	  e->pos = a1 % a2;
+	  e = faire_cst_expr(e1->pos % e2->pos);
 	}
-      e->cst = true;
     }
   else
     {
-      e = fairexpr(NULL);
+	/*e = fairexpr(NULL);
       if (c1)
 	{
 	  printf("\tLOAD #%i\n", a1);
@@ -1202,9 +989,12 @@ expr* op_mult_div_mod(char *op, int a1, bool c1, int a2, bool c2)
       else
 	{
 	  printf("\tLOAD %%%i\n", a1 + n_push);
-	}
+	  }*/
+      CHRG_EXPR(e1);
+      libere(e1);
       printf("\tPUSH\n");
-      if (c2)
+      ++n_push;
+      /*if (c2)
 	{
 	  printf("\tLOAD #%i\n", a2);
 	}
@@ -1212,9 +1002,12 @@ expr* op_mult_div_mod(char *op, int a1, bool c1, int a2, bool c2)
 	{ // +1 pour le push précédent.
 	  printf("\tLOAD %%%i\n", a2 + n_push + 1);
 	  
-	}
-      printf("\tPUSH\n\tCALL %s\n\tPOP #2\n", op);//Le POP #2 annule les push.
-      if (recycle)
+	  }*/
+      CHRG_EXPR(e2);
+      libere(e2);
+      printf("\tPUSH\n\tCALL %s\n\tMSP #-2\n", op);//Le MSP #-2 annule les push.
+      --n_push;
+      /*if (recycle)
 	{
 	  printf("\tSTORE %%%i\n", e->pos + n_push);
 	}
@@ -1222,7 +1015,8 @@ expr* op_mult_div_mod(char *op, int a1, bool c1, int a2, bool c2)
 	{
 	  printf("\tPUSH\n");
 	  n_push++;
-	}
+	  }*/
+      STCK_EXPR(e);
     }
   return e;
 }
@@ -1238,17 +1032,18 @@ expr* op_mult_div_mod(char *op, int a1, bool c1, int a2, bool c2)
 
 /* Détermine si une variable globale existe déjà.
    nom : le nom de la variable
-   Retour : true si une variable globale de ce nom existe et false sinon. */
-bool glob_existe(char *nom)
+   Retour : l'index de la variable dans le tableau des globales si une 
+   variable globale de ce nom existe et -1 sinon. */
+int glob_existe(char *nom)
 {
   for (int i = 0; i < n_glob; ++i)
     {
       if(!strcmp(globales[i], nom))
 	{
-	  return true;
+	  return i;
 	}
     }
-  return false;
+  return -1;
 }
 
 /* Renvoie le label d'une chaîne littérale, ou -1 si cette chaîne n'existe

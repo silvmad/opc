@@ -27,6 +27,7 @@ id rom_funcs[256];
 int rf_count = 0;
 extern char* functions[];
 extern int n_func;
+extern char *cur_func;
 
 bool make_rom = false;
 
@@ -257,7 +258,7 @@ int main(int argc, char **argv)
 	}
     }
   int r = yyparse();
-  if (in_func)
+  if (in_func && strcmp(cur_func, "main"))
     {
       fprintf(stderr, "%i: Erreur : absence de RET en fin de fonction\n",
 	      lineno);

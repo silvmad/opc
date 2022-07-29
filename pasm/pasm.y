@@ -53,6 +53,7 @@ int n_plab = 0;
 char *functions[256];
 int n_func = 0;
 bool in_func = false;
+char *cur_func;
 
 extern id rom_funcs[256];
 extern int rf_count;
@@ -72,7 +73,7 @@ int error_count = 0;
 %token  <s> IDENTIFIER
 %token	<s> STRING
 			
-%token GLOBL FUNC ADD SUB NAND LOAD STORE IN OUT OUTC POP PUSH JUMP BRN BRZ CALL RET
+%token GLOBL FUNC ADD SUB NAND LOAD STORE IN OUT OUTC POP MSP PUSH JUMP BRN BRZ CALL RET LEA
 
 %type	<i> number
 %type	<i> address
@@ -143,17 +144,55 @@ decl    :       GLOBL IDENTIFIER '\n'
                           YYERROR;
                         }
                     }
+		  int i = 0;
+		  char c;
                   if (get_var_addr($2) == -1)
-	            { 
+	            {
+		      c = str[i++];
+		      if (c == '\\')
+		        {
+			  if (str[i] == 'n')
+			    {
+			      c = '\n';
+			      ++i;
+			    }
+			  else if (str[i] == 't')
+			    {
+			      c = '\t';
+			      ++i;
+			    }
+			  else
+			    {
+			      c = '\\';
+			    }
+			}
                       variables[n_var].name = $2;
-                      variables[n_var].val = str[0];
+                      variables[n_var].val = c;
                       variables[n_var].val_set = true;
                       variables[n_var++].addr = 0;
                       // On copie toute la chaîne y compris le 0 final.
-                      for (int i = 1; i <= strlen(str); ++i)
+                      while (i <= strlen(str))
    		        {
+			  c = str[i++];
+		          if (c == '\\')
+		            {
+			      if (str[i] == 'n')
+			        {
+			          c = '\n';
+				  ++i;
+			        }
+			      else if (str[i] == 't')
+			        {
+			          c = '\t';
+				  ++i;
+			        }
+			      else
+				{
+				  c = '\\';
+				}
+			    }
                           variables[n_var].name = 0;
-                          variables[n_var].val = str[i];
+                          variables[n_var].val = c;
                           variables[n_var].val_set = true;
                           variables[n_var++].addr = 0;
                         }
@@ -182,21 +221,22 @@ decl    :       GLOBL IDENTIFIER '\n'
 instr :         IDENTIFIER ':'
                 { if (func_exists($1))
 		    {
-                      if (in_func)
+			if (in_func)// && strcmp(cur_func, "main"))
 		        {
 			  fprintf(stderr, "%i: Absence de RET en fin de "
                                   "fonction.\n", lineno - 1);
                           YYERROR;
                         }
                       in_func = true;
+		      cur_func = $1;
                     }
-                  if (label_exists(mem_pos))
+                  /*if (label_exists(mem_pos))
 		    {
                       fprintf(stderr, "%i: Plusieurs labels au même "
                               "emplacement (%s).\n", lineno, $1);
                       YYERROR;
                     }
-                  else if (get_lab_addr($1) == -1)
+                  else*/ if (get_lab_addr($1) == -1)
 		    {
                       labels[n_lab].name = $1;
                       labels[n_lab++].addr = mem_pos;
@@ -211,21 +251,22 @@ instr :         IDENTIFIER ':'
 	|	IDENTIFIER ':' '\n'
                 { if (func_exists($1))
 		    {
-                      if (in_func)
+                      if (in_func)// && strcmp(cur_func, "main"))
 		        {
 			  fprintf(stderr, "%i: Absence de RET en fin de "
                                   "fonction.\n", lineno - 1);
                           YYERROR;
                         }
                       in_func = true;
+		      cur_func = $1;
                     }
-                  if (label_exists(mem_pos))
+                  /*if (label_exists(mem_pos))
 		    {
                       fprintf(stderr, "%i: Plusieurs labels au même "
                               "emplacement (%s).\n", lineno, $1);
                       YYERROR;
                     }
-                  else if (get_lab_addr($1) == -1)
+                  else*/ if (get_lab_addr($1) == -1)
 		    {
                       labels[n_lab].name = $1;
                       labels[n_lab++].addr = mem_pos;
@@ -398,7 +439,7 @@ op      :       ADD '#' number { mem[mem_pos++] = 0x20;
                                   mem[mem_pos++] = $3; }
 	|	LOAD '#' IDENTIFIER
                 {
-                  if (get_var_addr($2) == -1)
+                  if (get_var_addr($3) == -1)
 		    {
                       yyerror("Variable non déclarée");
                       YYERROR;
@@ -406,7 +447,7 @@ op      :       ADD '#' number { mem[mem_pos++] = 0x20;
                   else
 		    {
                       pending_vars[n_pvar].addr = mem_pos + 1;
-                      pending_vars[n_pvar++].name = $2;
+                      pending_vars[n_pvar++].name = $3;
                       mem[mem_pos] = 0x0;
                       mem_pos += 2;
                     } }
@@ -460,11 +501,15 @@ op      :       ADD '#' number { mem[mem_pos++] = 0x20;
                       mem[mem_pos] = 0xD0;
                       mem_pos += 2;
                     } }
+	|	MSP '#' number { mem[mem_pos++] = 0x8;
+                                 mem[mem_pos++] = $3; }
+	|	LEA '%' number { mem[mem_pos++] = 0x3;
+                                 mem[mem_pos++] = $3; }
 	|	POP { mem[mem_pos++] = 0x4;
                       mem[mem_pos++] = 0; }
                       //--stack_count; }
-	|	POP '#' number { mem[mem_pos++] = 0x6;
-                                 mem[mem_pos++] = $3; }
+/*	|	POP '#' number { mem[mem_pos++] = 0x6;
+                                 mem[mem_pos++] = $3; }*/
 	|	POP address { mem[mem_pos++] = 0x44;
                               mem[mem_pos++] = $2; }
                               //--stack_count; }
@@ -655,6 +700,8 @@ op      :       ADD '#' number { mem[mem_pos++] = 0x20;
                       mem[mem_pos] = 0xD9;
                       mem_pos += 2;
                     }}
+	|	OUT '#' number { mem[mem_pos++] = 0x1;
+                                 mem[mem_pos++] = $3; }
 	|	OUT address { mem[mem_pos++] = 0x41;
                               mem[mem_pos++] = $2; }
 	|	OUT IDENTIFIER
@@ -705,6 +752,8 @@ op      :       ADD '#' number { mem[mem_pos++] = 0x20;
                       mem[mem_pos] = 0xD1;
                       mem_pos += 2;
                     } }
+	|	OUTC '#' number { mem[mem_pos++] = 0x2;
+                                 mem[mem_pos++] = $3; }
 	|	OUTC address { mem[mem_pos++] = 0x42;
                                mem[mem_pos++] = $2; }
 	|	OUTC IDENTIFIER
@@ -755,6 +804,9 @@ op      :       ADD '#' number { mem[mem_pos++] = 0x20;
                       mem[mem_pos] = 0xD2;
                       mem_pos += 2;
                     } }
+	|	JUMP number
+                { mem[mem_pos++] = 0x10;
+                  mem[mem_pos++] = $2; }
 	|	JUMP IDENTIFIER
                 { mem[mem_pos++] = 0x10;
                   int addr = get_lab_addr($2);
@@ -797,8 +849,7 @@ op      :       ADD '#' number { mem[mem_pos++] = 0x20;
  	|	CALL IDENTIFIER
                 { if (!func_exists($2))
   		    {
-                      yyerror("Fonction non déclarée");
-                      YYERROR;
+                      yyerror("Warning : Fonction non déclarée");
                     }
                  /* if (in_func)
   		    {
