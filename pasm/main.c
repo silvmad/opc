@@ -40,7 +40,7 @@ int get_lab_addr(char*);
 
 // Flags des options.
 enum { B_OPT = 1, O_OPT = 2, T_OPT = 4, P_OPT = 8, R_OPT = 16, L_OPT = 32,
-  I_OPT = 64 };
+  /*I_OPT = 64*/ };
 
 int main(int argc, char **argv)
 {
@@ -61,7 +61,7 @@ int main(int argc, char **argv)
 	  { 0, 0, 0, 0}
 	};
 
-      opt = getopt_long(argc, argv, "bo:t:pr:l:i", long_options, NULL);
+      opt = getopt_long(argc, argv, "bo:t:pr:l:", long_options, NULL);
 
       if (opt == -1)
 	break;
@@ -112,10 +112,10 @@ int main(int argc, char **argv)
 	case 'l' :
 	  options |= L_OPT;
 	  rom_filename = strdup(optarg);
-	  break;
+	  break;/*
 	case 'i':
 	  options |= I_OPT;
-	  break;
+	  break;*/
 	case '?': ;
 	  char s[1024];
 	  snprintf(s, 1024, "Usage : %s [OPTION]... FILE", argv[0]);
@@ -125,7 +125,7 @@ int main(int argc, char **argv)
 	}
     }
 
-  if (!(options & I_OPT) && optind == argc)
+  if (/*!(options & I_OPT) && */optind == argc)
     {
       char s[1024];
       snprintf(s, 1024, "Usage : %s [OPTION]... FILE", argv[0]);
@@ -245,8 +245,8 @@ int main(int argc, char **argv)
       usage("Erreur : format de fichier d'entrée incorrect.");
     }
 
-  if (!(options & I_OPT))
-    {
+  /*  if (!(options & I_OPT))
+      {*/
       // Redirection de l'entrée standard.
       FILE *f = freopen(input_filename, "r", stdin);
       if (f == NULL)
@@ -256,7 +256,7 @@ int main(int argc, char **argv)
 		   input_filename);
 	  usage(s);
 	}
-    }
+      //}
   int r = yyparse();
   if (in_func && strcmp(cur_func, "main"))
     {

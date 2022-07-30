@@ -2,8 +2,8 @@
 *.o
 *.yy.*
 *.tab.*
-*pasm
-*op
+pasm/pasm
+op/op
 *.hexcode
 *.mic
 *.BAK

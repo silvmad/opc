@@ -26,6 +26,12 @@ opc.tab.c : opc.y
 lex.yy.c : opc.l
 	flex opc.l
 
+install : opc
+	install opc ~/.local/bin/opc
+
+uninstall : 
+	rm ~/.local/bin/opc
+
 .PHONY : clean
 
 clean :

@@ -4,9 +4,13 @@ all : op pasm opc
 
 recompile : clean all
 
-clean : op_clean pasm_clean
+clean : op_clean pasm_clean opc_clean
 
-debug : op_debug pasm_debug
+debug : op_debug pasm_debug opc_debug
+
+install : op_install pasm_install opc_install
+
+uninstall : op_uninstall pasm_uninstall opc_uninstall
 
 op :
 	$(MAKE) -C op/
@@ -34,3 +38,22 @@ pasm_debug :
 
 opc_debug :
 	$(MAKE) -C opc/ debug
+
+op_install :
+	$(MAKE) -C op/ install
+
+pasm_install :
+	$(MAKE) -C pasm/ install
+
+opc_install :
+	$(MAKE) -C opc/ install
+
+op_uninstall :
+	$(MAKE) -C op/ uninstall
+
+pasm_uninstall :
+	$(MAKE) -C pasm/ uninstall
+
+opc_uninstall :
+	$(MAKE) -C opc/ uninstall
+

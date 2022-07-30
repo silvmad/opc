@@ -23,6 +23,12 @@ pasm.tab.c : pasm.y
 lex.yy.c : pasm.l
 	flex pasm.l
 
+install : pasm
+	install pasm ~/.local/bin/pasm
+
+uninstall : 
+	rm ~/.local/bin/pasm
+
 .PHONY : clean
 
 clean :
