@@ -27,7 +27,7 @@ install : pasm
 	install pasm ~/.local/bin/pasm
 
 uninstall : 
-	rm ~/.local/bin/pasm
+	-rm ~/.local/bin/pasm
 
 .PHONY : clean
 

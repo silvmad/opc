@@ -15,7 +15,7 @@ install : op
 	install op ~/.local/bin/op
 
 uninstall : 
-	rm ~/.local/bin/op
+	-rm ~/.local/bin/op
 
 .PHONY : clean
 

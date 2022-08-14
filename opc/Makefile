@@ -30,7 +30,7 @@ install : opc
 	install opc ~/.local/bin/opc
 
 uninstall : 
-	rm ~/.local/bin/opc
+	-rm ~/.local/bin/opc
 
 .PHONY : clean
 
