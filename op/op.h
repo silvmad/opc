@@ -1,3 +1,14 @@
+/*
+IED L3 Informatique
+Développement de logiciel libre
+Victor Matalonga
+Numéro étudiant 18905451
+
+fichier : op.h
+
+Fichier en-tête pour l'ordinateur en papier.
+*/
+
 #ifndef OP_H
 #define OP_H
 #endif
@@ -5,9 +16,11 @@
 #include <stdbool.h>
 
 #define DEFAULT_ROM_PATH "/usr/share/op/rom"
+#define LOCAL_DEFAULT_ROM_PATH "/.local/share/op/rom"
 #define CUSTOM_ROM_PATH "/.local/share/op/"
 #define ROM_PATH_MAX_LEN 4096
 
+/* Pour le futur
 typedef struct
 {
   int ram[512];
@@ -18,6 +31,7 @@ typedef struct
   int A;
   int mem_space;
 } state;
+*/
 
 enum {RAM, ROM};
 

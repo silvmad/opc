@@ -7,7 +7,8 @@ Numéro étudiant 18905451
 
 fichier : expr.c
 
-Gestion des expressions */
+Gestion des expressions 
+*/
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -23,6 +24,9 @@ expr expressions[MAX_EXPR];
 int n_expr = 0;
 bool recycle;
 
+/* Fabrique une expressions. 
+   Essaie au maximum de réutiliser des expressions libres. 
+   Renvoie l'expression créée. */
 expr* fairexpr(char *nom)
 {
   expr *e;
@@ -58,6 +62,8 @@ expr* fairexpr(char *nom)
   return e;
 }
 
+/* Crée une expression correspondant à une constant. 
+   Cette expression n'est pas ajoutée au tableau des expression. */
 expr* faire_cst_expr(int val)
 {
   expr *e = calloc(sizeof(expr), 1);
@@ -66,6 +72,8 @@ expr* faire_cst_expr(int val)
   return e;
 }
 
+/* Renvoie l'expression correspondant à la variable dont le nom est donnée en 
+   argument. */
 expr * exprvar(char *nom)
 {
   expr *e;
@@ -77,11 +85,15 @@ expr * exprvar(char *nom)
 	  return e;
 	}
     }
-  //fprintf(stderr, "%i : Erreur : variable non déclarée (%s)\n", lineno, nom);
   return NULL;
 }
 
-/* libere  --  marque une expression comme libre */
+/* Libère une expression.
+   S'il s'agit d'une expression correspondant à une constante, une variable
+   globale ou une chaîne littérale et qui n'a donc pas été ajoutée au tableau
+   expression, la mémoire correspondant à cette expression est simplement 
+   libérée. 
+   Sinon l'expression est marquée comme libre pour pouvoir être réutilisée. */
 void libere(expr * e)
 {
   if (e->cst || e->litt || e->glob)
@@ -103,6 +115,9 @@ void libere_n_derniers(int n)
     }
 }
 
+/* Permet de libérer les expressions correspondant à des variables locales dont
+   on a quitté l'espace. 
+   n : le début de l'espace locale que l'on vient de quitter. */
 void libere_variables_locales(int n)
 {
   expr *e;
@@ -131,6 +146,9 @@ bool loc_existe(char *nom)
   return false;
 }
 
+/* Ajoute n à la valeur de n_expr.
+   Si n_expr est positif, toutes les expressions dans les cases n_expr à 
+   n_expr + n sont libérées et leur nom est supprimé. */
 void incr_n_expr(int n)
 {
   if (n > 0)

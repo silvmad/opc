@@ -1,7 +1,6 @@
 /*
 IED L3 Informatique
-Interprétation et compilation
-Projet final
+Développement de logiciel libre
 Victor Matalonga
 Numéro étudiant 18905451
 
@@ -29,9 +28,7 @@ bool func_exists(char*);
 int rom_func_addr(char*);
 bool is_rom_func(char*);
 
-// Variables globales de l'analyseur lexical.
-extern int lineno;
-extern char *yytext;
+
 
 // Variables globales de l'analyseur syntaxique.
 unsigned int mem[256];
@@ -42,8 +39,6 @@ int n_var = 0;
 id pending_vars[256];
 int n_pvar = 0;
 
-//int stack_count = 0;
-
 id labels[256];
 int labels_size = 256;
 int n_lab = 0;
@@ -53,11 +48,7 @@ int n_plab = 0;
 char *functions[256];
 int n_func = 0;
 bool in_func = false;
-char *cur_func;
-
-extern id rom_funcs[256];
-extern int rf_count;
-extern int make_rom;
+//char *cur_func;
 
 int error_count = 0;
 
@@ -221,22 +212,15 @@ decl    :       GLOBL IDENTIFIER '\n'
 instr :         IDENTIFIER ':'
                 { if (func_exists($1))
 		    {
-			if (in_func)// && strcmp(cur_func, "main"))
+			if (in_func)
 		        {
 			  fprintf(stderr, "%i: Absence de RET en fin de "
                                   "fonction.\n", lineno - 1);
                           YYERROR;
                         }
                       in_func = true;
-		      cur_func = $1;
                     }
-                  /*if (label_exists(mem_pos))
-		    {
-                      fprintf(stderr, "%i: Plusieurs labels au même "
-                              "emplacement (%s).\n", lineno, $1);
-                      YYERROR;
-                    }
-                  else*/ if (get_lab_addr($1) == -1)
+                   if (get_lab_addr($1) == -1)
 		    {
                       labels[n_lab].name = $1;
                       labels[n_lab++].addr = mem_pos;
@@ -251,22 +235,15 @@ instr :         IDENTIFIER ':'
 	|	IDENTIFIER ':' '\n'
                 { if (func_exists($1))
 		    {
-                      if (in_func)// && strcmp(cur_func, "main"))
+                      if (in_func)
 		        {
 			  fprintf(stderr, "%i: Absence de RET en fin de "
                                   "fonction.\n", lineno - 1);
                           YYERROR;
                         }
                       in_func = true;
-		      cur_func = $1;
                     }
-                  /*if (label_exists(mem_pos))
-		    {
-                      fprintf(stderr, "%i: Plusieurs labels au même "
-                              "emplacement (%s).\n", lineno, $1);
-                      YYERROR;
-                    }
-                  else*/ if (get_lab_addr($1) == -1)
+                  if (get_lab_addr($1) == -1)
 		    {
                       labels[n_lab].name = $1;
                       labels[n_lab++].addr = mem_pos;
@@ -507,12 +484,8 @@ op      :       ADD '#' number { mem[mem_pos++] = 0x20;
                                  mem[mem_pos++] = $3; }
 	|	POP { mem[mem_pos++] = 0x4;
                       mem[mem_pos++] = 0; }
-                      //--stack_count; }
-/*	|	POP '#' number { mem[mem_pos++] = 0x6;
-                                 mem[mem_pos++] = $3; }*/
 	|	POP address { mem[mem_pos++] = 0x44;
                               mem[mem_pos++] = $2; }
-                              //--stack_count; }
 	|	POP IDENTIFIER
                 {
                   if (get_var_addr($2) == -1)
@@ -527,10 +500,8 @@ op      :       ADD '#' number { mem[mem_pos++] = 0x20;
                       mem[mem_pos] = 0x44;
                       mem_pos += 2;
                     } }
-                  //--stack_count; }
 	|	POP '*' address { mem[mem_pos++] = 0xC4;
                                   mem[mem_pos++] = $3; }
-                                  //--stack_count; }
 	|	POP '*' IDENTIFIER
                 {
                   if (get_var_addr($3) == -1)
@@ -545,10 +516,8 @@ op      :       ADD '#' number { mem[mem_pos++] = 0x20;
                       mem[mem_pos] = 0xC4;
                       mem_pos += 2;
                     } }
-                  //--stack_count; }
 	|	PUSH { mem[mem_pos++] = 0x5;
                        mem[mem_pos++] = 0; }
-                       //++stack_count; }
 	|	PUSH '#' number { mem[mem_pos++] = 0x7;
                                   mem[mem_pos++] = $3; }
 	|	PUSH '#' IDENTIFIER
@@ -851,25 +820,9 @@ op      :       ADD '#' number { mem[mem_pos++] = 0x20;
   		    {
                       yyerror("Warning : Fonction non déclarée");
                     }
-                 /* if (in_func)
-  		    {
-                      yyerror("Appel de fonction à l'intérieur d'une "
-                              "fonction");
-                      YYERROR;
-                    }*/
-                 /* if (get_var_addr("%ret") == -1)
-		    {
-                      variables[n_var].name = "%ret";
-                      variables[n_var++].addr = 0;
-                    }*/
-/*                  mem[mem_pos] = 0x0; // LOAD
-                  mem[mem_pos + 1] = mem_pos + 6;
-                  mem_pos += 2;*/
                   mem[mem_pos++] = 0x7; // PUSH #
                   mem[mem_pos] = mem_pos + 3;
                   ++mem_pos;
-/*                pending_vars[n_pvar].addr = mem_pos++;
-                  pending_vars[n_pvar++].name = "%ret";*/
                   if (is_rom_func($2))
 		    {
                       mem[mem_pos++] = 0x13; // SJUMP
@@ -890,23 +843,12 @@ op      :       ADD '#' number { mem[mem_pos++] = 0x20;
                           mem[mem_pos++] = addr;
                         }
                     } }
-                  //++stack_count; } 
 	|	RET
                 { if (!in_func)
   		    {
                       yyerror("RET à l'extérieur d'une fonction");
                       YYERROR;
                     }
-/*                  if (get_var_addr("%ret") == -1)
-		    {
-                      variables[n_var].name = "%ret";
-                      variables[n_var++].addr = 0;
-                    }*/
-/*                  pending_vars[n_pvar].addr = mem_pos++;
-                  pending_vars[n_pvar++].name = "%ret";
-                  mem[mem_pos++] = 0x48; // STORE
-                  mem[mem_pos] = mem_pos + 2;
-                  ++mem_pos;*/
                   if (make_rom)
 		    {
                       mem[mem_pos++] = 0x14; // SRET
@@ -921,7 +863,6 @@ op      :       ADD '#' number { mem[mem_pos++] = 0x20;
                       mem[mem_pos++] = 0;
                     }
                   in_func = false;
-                  //--stack_count;
                  }
 ;
 

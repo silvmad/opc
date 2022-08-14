@@ -1,3 +1,15 @@
+/*
+IED L3 Informatique
+Développement de logiciel libre
+Projet final
+Victor Matalonga
+Numéro étudiant 18905451
+
+fichier : expr.h
+
+Fichier en-tête pour les expressions. 
+*/
+
 #ifndef EXPR_H
 #define EXPR_H
 
@@ -8,7 +20,6 @@
 typedef struct {
   int pos;
   char *nom;
-  //  int flags;
   bool libre;
   bool glob;
   bool litt;

@@ -1,3 +1,15 @@
+/*
+IED L3 Informatique
+Développement de logiciel libre
+Projet final
+Victor Matalonga
+Numéro étudiant 18905451
+
+fichier : opc.h
+
+Fichier en-tête du compilateur de l'ordinateur en papier. 
+*/
+
 #ifndef OPC_H
 #define OPC_H
 

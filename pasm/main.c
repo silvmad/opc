@@ -1,7 +1,6 @@
 /*
 IED L3 Informatique
-Interprétation et compilation
-Projet final
+Développement de logiciel libre
 Victor Matalonga
 Numéro étudiant 18905451
 
@@ -19,15 +18,9 @@ Code de lancement de l'assembleur pour l'ordinateur en papier.
 #include "pasm.tab.h"
 #include "pasm.h"
 
-extern int lineno;
-extern int mem_pos;
-extern int error_count;
-extern int in_func;
+
 id rom_funcs[256];
 int rf_count = 0;
-extern char* functions[];
-extern int n_func;
-extern char *cur_func;
 
 bool make_rom = false;
 
@@ -39,8 +32,7 @@ void print_prog(int, int);
 int get_lab_addr(char*);
 
 // Flags des options.
-enum { B_OPT = 1, O_OPT = 2, T_OPT = 4, P_OPT = 8, R_OPT = 16, L_OPT = 32,
-  /*I_OPT = 64*/ };
+enum { B_OPT = 1, O_OPT = 2, T_OPT = 4, P_OPT = 8, R_OPT = 16, L_OPT = 32, };
 
 int main(int argc, char **argv)
 {
@@ -106,16 +98,21 @@ int main(int argc, char **argv)
 	  break;
 	case 'r' :
 	  options |= R_OPT;
+	  if (!optarg)
+	    {
+	      usage("L'option -r attend un argument.");
+	    }
 	  rom_filename = strdup(optarg);
 	  make_rom = true;
 	  break;
 	case 'l' :
 	  options |= L_OPT;
+	  if (!optarg)
+	    {
+	      usage("L'option -l attend un argument.");
+	    }
 	  rom_filename = strdup(optarg);
-	  break;/*
-	case 'i':
-	  options |= I_OPT;
-	  break;*/
+	  break;
 	case '?': ;
 	  char s[1024];
 	  snprintf(s, 1024, "Usage : %s [OPTION]... FILE", argv[0]);
@@ -125,7 +122,7 @@ int main(int argc, char **argv)
 	}
     }
 
-  if (/*!(options & I_OPT) && */optind == argc)
+  if (optind == argc)
     {
       char s[1024];
       snprintf(s, 1024, "Usage : %s [OPTION]... FILE", argv[0]);
@@ -184,8 +181,13 @@ int main(int argc, char **argv)
       mem_pos = offset;
     }
 
+  // Créer le chemin vers la ROM.
   char rom_addr_path[ROM_PATH_MAX_LEN] = {0};
   char rom_path[ROM_PATH_MAX_LEN] = {0};
+  /* Si options -l ou -r on cherche la ROM dans le répertoire des ROMs 
+     utilisateur. Pour cela on concatène le chemin vers le répertoire 
+     personnel de l'utilisateur, le chemin vers les ROMs utilisateurs et
+     le nom de ROM demandé.  */
   if (options & L_OPT || options & R_OPT)
     {
       char *home_path = getenv("HOME");
@@ -199,10 +201,27 @@ int main(int argc, char **argv)
       strncat(rom_path, rom_filename, len);
       strncat(rom_addr_path, "_addr", len - strlen(rom_filename));
     }
+  /* Sinon on utilise la ROM par défaut. */
   else
     {
       strncpy(rom_addr_path, ROM_DEFAULT_ADDR_PATH, ROM_PATH_MAX_LEN);
       strncpy(rom_path, ROM_DEFAULT_PATH, ROM_PATH_MAX_LEN);
+      // On teste si la ROM par défaut est présente
+      FILE *r = fopen(rom_addr_path, "r");
+      // Si elle n'est pas présente on utilise la rom par défaut locale.
+      if (!r)
+	{
+	  char *home_path = getenv("HOME");
+	  strncpy(rom_addr_path, home_path, ROM_PATH_MAX_LEN - 1);
+	  strncpy(rom_path, home_path, ROM_PATH_MAX_LEN - 1);
+	  int len = ROM_PATH_MAX_LEN - 1 - strlen(home_path);
+	  strncat(rom_path, LOCAL_ROM_DEFAULT_PATH, len);
+	  strncat(rom_addr_path, LOCAL_ROM_DEFAULT_ADDR_PATH, len);
+	}
+      else
+	{
+	  fclose(r);
+	}
     }
 	      
   // Charger les adresses des fonctions de la rom.
@@ -210,11 +229,17 @@ int main(int argc, char **argv)
   if (!(options & R_OPT))
     {
       FILE *rom = fopen(rom_addr_path, "r");
+      if (!rom)
+	{
+	  usage("Impossible d'ouvrir le fichier ROM.");
+	}
       char buffer[2048];
       char *endptr;
+      // Lire un premier mot (un nom de fonction).
       while(fscanf(rom, " %[^\n ]", buffer) != EOF)
 	{
 	  rom_funcs[rf_count].name = strdup(buffer);
+	  // Lire un deuxième mot (l'adresse de début de la fonction). 
 	  if (fscanf(rom, " %[^\n ]", buffer) == EOF)
 	    {
 	      printf("Erreur : contenu du fichier %s incorrect.\n",
@@ -245,20 +270,18 @@ int main(int argc, char **argv)
       usage("Erreur : format de fichier d'entrée incorrect.");
     }
 
-  /*  if (!(options & I_OPT))
-      {*/
-      // Redirection de l'entrée standard.
-      FILE *f = freopen(input_filename, "r", stdin);
-      if (f == NULL)
-	{
-	  char s[1024];
-	  snprintf(s, 1024, "Impossible d'ouvrir le fichier %s",
-		   input_filename);
-	  usage(s);
-	}
-      //}
-  int r = yyparse();
-  if (in_func && strcmp(cur_func, "main"))
+  // Redirection de l'entrée standard.
+  FILE *f = freopen(input_filename, "r", stdin);
+  if (f == NULL)
+    {
+      char s[1024];
+      snprintf(s, 1024, "Impossible d'ouvrir le fichier %s",
+	       input_filename);
+      usage(s);
+    }
+
+      int r = yyparse();
+  if (in_func /*& strcmp(cur_func, "main")*/)
     {
       fprintf(stderr, "%i: Erreur : absence de RET en fin de fonction\n",
 	      lineno);
@@ -327,6 +350,8 @@ int main(int argc, char **argv)
     }
 }
 
+/* Afficher un message d'erreur et quitter.
+   msg : le message à afficher. */
 void usage(char *msg)
 {
   fprintf(stderr, "%s\n", msg);

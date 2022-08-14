@@ -5,7 +5,7 @@ Projet final
 Victor Matalonga
 Numéro étudiant 18905451
 
-fichier : pasm.y
+fichier : opc.y
 
 Code de lancement du compilateur pour l'ordinateur en papier.
 
@@ -71,13 +71,15 @@ int main(int argc, char **argv)
       usage(s);
     }
   int inp_len = strlen(inp_filename);
-  if (inp_len < 6 || strcmp(inp_filename + inp_len - 4, ".mic"))
+  if (inp_len < 5 || strcmp(inp_filename + inp_len - 4, ".mic"))
     {
       usage("Format de fichier d'entrée incorrect.");
     }
-  
+
+  // Création du nom de fichier de sortie si non précisé par l'option -o.
   if (!outp_filename)
     {
+      // Remplacer .mic par .pasm
       if (options & S_OPT)
 	{
 	  int len = strlen(inp_filename);
@@ -86,12 +88,14 @@ int main(int argc, char **argv)
 	  strncpy(outp_filename, inp_filename, len);
 	  strcpy(outp_filename + inp_len - 3, "pasm");
 	}
+      // Nom par défaut.
       else
 	{
 	  outp_filename = DEFAULT_OUTP_FILENAME;
 	}
     }
 
+  // Ouvrir le fichier d'entrée.
   FILE *f = freopen(inp_filename, "r", stdin);
   if (f == NULL)
     {
@@ -99,15 +103,17 @@ int main(int argc, char **argv)
       snprintf(s, 1024, "Impossible d'ouvrir le fichier %s", inp_filename);
       usage(s);
     }
-  
+
+  /* Si l'option -s est présente ,on génère l'assembleur directement dans 
+     le fichier de sortie. */
   if (options & S_OPT)
     {
       freopen(outp_filename, "w", stdout);
       printf("\tJUMP main\n");
       yyparse();
-      //printf("end:\n");
-
     }
+  /* Sinon on le génère dans un fichier temporaire et on appelle pasm sur 
+     ce fichier avec les options nécessaires. */
   else
     {
       FILE * flux = freopen(TMP_FILE, "w", stdout);
@@ -115,7 +121,6 @@ int main(int argc, char **argv)
       int t = yyparse();
       if (t == 0)
 	{
-	  //printf("end:\n");
 	  t = fork();
 	  if (t == -1)
 	    {
@@ -125,7 +130,19 @@ int main(int argc, char **argv)
 	    {
 	      char *args[10];
 	      make_args(args, options, rom, offset, outp_filename);
-      	      execv(ASM_PATH, args);
+      	      t = execv(ASM_PATH, args);
+	      if (t < 0)
+		{
+		  char path[MAX_FILENAME_SIZE] = {0};
+		  strncpy(path, getenv("HOME"), MAX_FILENAME_SIZE - 1);
+		  int len = strlen(path);
+		  strncat(path, LOCAL_ASM_PATH, MAX_FILENAME_SIZE - len);
+		  t = execv(path, args);
+		  if (t < 0)
+		    {
+		      usage("Impossible de trouver pasm.");
+		    }
+		}
 	    }
 	  else // Parent.
 	    {
@@ -135,13 +152,33 @@ int main(int argc, char **argv)
     }
   return 0;
 }
-  
+
+/* Affiche un message d'erreur et quitte le programme. 
+   msg : le message à afficher. */
 void usage(char *msg)
 {
   fprintf(stderr, "%s\n", msg);
   exit(1);
 }
 
+/* Crée le tableau des arguments pour l'appel de pasm. 
+   Les arguments passés dans tous les cas à pasm sont : 
+   - Le nom du programme pasm
+   - Le nom du fichier temporaire à lire
+   - L'option -o avec le nom du fichier de sortie en argument.
+   Les options suivantes et leur argument ne sont passées que si opc a été 
+   appelé avec :   
+   - L'option -l et le nom de la ROM associé.
+   - L'option -t et l'offset associé.
+   - L'option -b
+
+   Arguments de la fonction :
+   args : le tableau à remplir
+   options : les options passées à opc.
+   rom : le nom de la rom si présent.
+   offset : l'offset si présent
+   outp_filename : le nom du fichier de sortie
+   */
 void make_args(char **args, int options, char *rom, char *offset,
 	      char* outp_filename)
 {

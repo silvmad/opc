@@ -18,7 +18,8 @@ en papier.
 #define MAX_FILENAME_SIZE 4096
 #define DEFAULT_OUTP_FILENAME "a.out"
 #define ASM_NAME "pasm"
-#define ASM_PATH "pasm/pasm"
+#define ASM_PATH "/usr/bin/pasm"
+#define LOCAL_ASM_PATH "/.local/bin/pasm"
 #define TMP_FILE "/tmp/temp.pasm"
 enum { S_OPT = 1, L_OPT = 2, B_OPT = 4, T_OPT = 8 };
 

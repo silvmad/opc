@@ -1,7 +1,6 @@
 /*
 IED L3 Informatique
-Interprétation et compilation
-Projet final
+Développement de logiciel libre
 Victor Matalonga
 Numéro étudiant 18905451
 
