@@ -1,0 +1,68 @@
+.\" Manuel de pasm.
+.\" Contact : victor.matalonga@etud.univ-paris8.fr pour correction d'erreurs.
+.TH pasm 1 "31 Juillet 2022" "1.0" ""
+.SH NOM
+pasm : Un assembleur pour l'ordinateur en papier amélioré. 
+.SH SYNOPSIS
+.B pasm
+.RB [ -t
+.IR offset ]
+.RB [ -p | -b
+.B -l
+.I rom
+.B -o
+.IR fichier_sortie ] \ fichier_sortie
+.br
+.B pasm -r
+.I rom nom_fichier
+.SH DESCRIPTION
+pasm traduit du code p-assembleur en langage machine de l'ordinateur en papier. Il réalise aussi une édition
+de liens pour les variables et les labels afin que le code produit soit directement exécutable.
+
+Le fichier contenant le code à traduire donné en argument doit posséder l'extension .pasm. Le code produit est alors écrit dans un nouveau fichier avec le même nom mais dont l'extension est .hexcode. Par défaut, le code
+produit est écrit en hexadécimal en mode texte, une instruction par ligne, l'opérateur séparé de son opérande
+par un espace.
+
+.SH OPTIONS
+.TP
+\fB\-o\fR=\fIsortie\fR
+Écrit le code produit dans un fichier nommé
+.I sortie
+.PP
+.TP
+.BR -b , \ --binary
+Écrit le code produit en mode binaire. Si le chier de sortie n'est pas précisé avec
+.BR -o ,
+il a le même nom que le fichier d'entrée avec l'extension .bin. 
+.PP
+.TP
+\fB\-t\fR, \fB\-\-offset\fR=\fIoffset\fR
+Traduit le code en considérant que le programme débute à l'adresse
+.I offset
+En l'absence d'argument la valeur
+par défaut est de 32 (qui correspond à l'espace mémoire occupé par le bootstrap dans certaines implémentations
+de l'ordinateur en papier).
+.PP
+.TP
+.BR -p , \ --print
+Le code produit est imprimé sur la sortie standard en hexadécimal. Aucun fichier n'est créé. Incompatible avec les options
+.B -o
+et
+.B -b
+qui sont alors ignorées si présentes.
+.PP
+.TP
+\fB\-l\fR=\fIrom\fR
+Compile le fichier en utilisant la ROM dont le nom est
+.I rom.
+Il ne faut pas donner le chemin complet vers la ROM, juste le nom de fichier, pasm ira chercher une ROM de ce nom dans le répertoire ~/.local/share/rom qui est l'endroit où sont créées les ROMs utilisateur.
+.PP
+.TP
+\fB\-r\fR=\fIrom\fR
+Compile le fichier d'entrée pour en faire une ROM sous le nom
+.IR rom .
+Le fichier produit ainsi que le fichier contenant les adresses correspondant aux fonctions sont placés dans le répertoire ~/.local/share/rom. Incompatible avec toute autre option.
+.SH VOIR AUSSI
+.BR op (1), \ opc (1), \ asm-papier (7)
+.SH AUTEUR
+Victor Matalonga (victor.matalonga@etud.univ-paris8.fr)

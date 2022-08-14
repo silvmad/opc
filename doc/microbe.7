@@ -1,0 +1,347 @@
+.\" Manuel de pasm.
+.\" Contact : victor.matalonga@etud.univ-paris8.fr pour correction d'erreurs.
+.TH microbe 7 "31 Juillet 2022" "1.0" ""
+.SH DESCRIPTION
+Cette page de manuel contient la documentation du langage microbe, un langage de programmation qui peut être compilé en assembleur papier afin de produire des programmes exécutables par l'ordinateur en papier.
+
+La syntaxe de microbe est semblable à celle du C. Les mots-clés sont en français. Il implémente les structures de contrôle et opérateurs de base. Il permet de définir des fonctions et des tableaux. Il n'utilise qu'un type de données : le nombre entier.
+
+.SH STRUCTURE D'UN PROGRAMME
+Un programme est composé d'une suite de fonction. Le point d'entrée du programme est la fonction main. Tout programme devra donc au minimum comporter une fonction ayant ce nom.
+
+Le corps d'une fonction se compose d'une suite d'instructions. Une instruction doit se terminer par un point virgule (;).
+
+En dehors des fonctions il est uniquement possible de déclarer des variables globales (éventellement initialisées avec une valeur constante).
+
+Il est possible d'écrire des commentaires de la même façon que pour le langage C et C++ :
+.IP \[bu] 2
+Des commentaires sur une ligne commençant par //.
+.IP \[bu]
+Des commentaires sur plusieurs lignes commençant par /* et finissant par */.
+.PP
+
+.RS 4
+.B // Ceci est un commentaire sur une ligne.
+.br
+.B /* Ceci est un commentaire
+.br
+.B   sur plusieurs lignes */
+.RE
+
+
+.SH FONCTION
+
+.SS DECLARATION DE FONCTIONS
+
+Une fonction est déclarée avec le mot-clé
+.B fonc
+suivi du nom de la fonction et du nom de ses arguments entre parenthèses. Le corps de la fonction est délimité par des accolades.
+
+.RS 4
+.B fonc mafonction(arg1, arg2)
+.br
+.B {
+.br
+.RS 4
+.B // Corps de la fonction.
+.RE
+.br
+.B }
+.RE
+
+Exception : La fonction main ne peut pas prendre d'arguments.
+
+.SS RETOUR
+
+Le mot-clé
+.B retour
+permet à la fonction de renvoyer une valeur. Si ce mot-clé n'est pas utilisé la fonction renvoie une valeur indéterminée.
+
+La fonction suivante renvoie la valeur 0.
+
+.RS 4
+.B fonc mafonction()
+.br
+.B {
+.br
+.RS 4
+.B retour 0;
+.RE
+.br
+.B }
+.RE
+
+.SH VARIABLES
+
+.SS DEFINITION
+
+Les variables sont définies avec le mot-clé
+.BR var .
+Les noms de variables peuvent contenir des lettres majuscules et minuscules (non accentuées) ainsi que des tirets-bas (_). Elles peuvent également contenir des chiffres mais ne peuvent pas commencer par un chiffre.
+
+.RS 4
+.B var ma_variable;
+.RE
+
+Il est possible de définir plusieurs variables en une seule ligne en les séparant par une virgule (,).
+
+.RS 4
+.B var variable_1, variable_2;
+.RE
+
+Il est possible d'initialiser la valeur d'une variable au moment de sa définition avec l'opérateur =. Lors de la définition de plusieurs variables en une ligne, tout ou partie de ces variables peuvent être également initialisées avec =.
+
+.RS 4
+.B var mavariable = 0;
+.br
+.B /* Les variables v1 et v4 ne sont pas initialisées, la variable v2 
+.br
+.B est initialisée à 2 et v3 à 3. */
+.br
+.B var v1, v2 = 2, v3 = 3, v4;
+.RE
+
+.SS AFFECTATION
+
+L'affectation se fait avec l'opérateur =, une affectation renvoie la valeur affectée.
+
+.RS 4
+.B var v; // Définition.
+.br
+.B v = 1; // Affectation.
+.RE
+
+.SS PORTÉE DES VARIABLES
+
+Les variables globales sont accessibles depuis n'importe quel point du programme.
+
+Les variables locales ont une portée réduite à la zone délimitée par des accolades dans laquelle elles se trouvent.
+
+Exception : les variables définies dans l'initialisation d'une boucle pour font partie de l'espace local de la boucle.
+
+.RS 4
+.br
+.B var a;
+.br
+.B {
+.br
+.RS 4
+.B var b = 1;
+.RE
+.br
+.B }
+.br
+.B a = b; // Erreur : b n'est pas définie.
+.RE
+
+Des variables de même nom peuvent coexister dans des espaces locaux différents. C'est la variable dans l'espace local le plus proche qui est utilisée. 
+
+.RS 4
+.br
+.B var a = 0;
+.br
+.B {
+.br
+.RS 4
+.B var a = 1;
+.br
+.B b = a; // b vaut 1.
+.RE
+.br
+.B }
+.br
+.B b = a; // b vaut 0.
+.RE
+
+Lorsque une variable locale et une variable globales ont le même nom, c'est la variable locale qui est utilisée dans son espace local.
+
+.SH TABLEAUX
+
+Il est possible de déclarer des tableaux en faisant suivre le nom de la variable par la taille du tableau entre crochets ([X] où X est la taille du tableau). Il n'est pas possible d'initialiser un tableau.
+
+.RS 4
+.B var a[3]; // Définit un tableau de 3 cases.
+.RE
+
+Les crochets servent aussi à accéder aux éléments du tableau. Les tableaux sont indexés à partir de 0.
+
+.RS 4
+.br
+.B var a[2];
+.br
+.B a[0] = 1; // Le premier élément de a vaut 1.
+.br
+.B a[1] = 2; // Le deuxième élément de a vaut 2.
+.br
+.B affv(a[0]); // Affiche 1.
+.RE
+
+Il n'est pas possible d'affecter une valeur à un tableau il faut utiliser les crochets pour affecter leur valeur à chaque case.
+
+.SH STRUCTURES DE CONTRÔLE
+
+.SS CONDITION
+
+Une condition est introduire par le mot-clé
+.B si
+suivi d'une expression entre parenthèses. Si l'expression est vraie, l'instruction ou le bloc d'instructions suivant la condition sont exécutés. Sinon ils ne le sont pas.
+
+Le mot-clé
+.B sinon
+peut être utilisé pour introduire une instruction ou un bloc qui seront exécutés si la condition est fausse.
+
+.RS 4
+.br
+.B si (a == 0)
+.br
+.B {
+.br
+.RS 4
+.B // Instructions exécutées si a vaut 0.
+.RE
+.br
+.B }
+.br
+.B sinon
+.br
+.B {
+.br
+.RS 4
+.B // Instructions exécutées si a ne vaut pas 0.
+.RE
+.br
+.B }
+.RE
+
+.SS BOUCLE TANT QUE
+
+La boucle tant que est introduite par le mot-clé
+.B tant que
+suivi d'une expression entre parenthèses et d'une instruction ou d'un bloc d'instructions.
+Si l'expression est vraie l'instruction ou le bloc d'instructions sont exécutées puis l'expression est à nouveau évaluées et ainsi de suite. Les instructions sont exécutées en boucle tant que l'expression est vraie.
+
+.RS 4
+.br
+.B tant que (a == 0)
+.br
+.B {
+.br
+.RS 4
+.B // Instructions exécutées tant que a vaut 0.
+.RE
+.br
+.B }
+.RE
+
+.SS BOUCLE POUR
+
+La boucle pour est introduite par le mot-clé
+.B pour
+suivi de trois expressions entre parenthèses séparées par points virgule. La première expression est exécutée avant le début de la boucle (elle peut contenir des définitions de variables qui seront locales à la boucle). La deuxième expression est la condition de sortie de la boucle, elle est évaluées à chaque tour de boucle, si elle est vraie le corps est exécuté sinon, la boucle se termine. La troisième expression est exécutée à la fin de chaque tour de boucle.
+
+.RS 4
+.br
+.B // Boucle qui affiche les chiffres de 0 à 9.
+.br
+.B pour (var i = 0; i < 10; i = i + 1)
+.br
+.B {
+.br
+.RS 4
+.B affv(i);
+.RE
+.br
+.B }
+.RE
+
+.SH OPÉRATEURS
+
+.SS OPÉRATEURS ARITHMÉTIQUES
+
+Les opérateurs arthmétiques disponibles sont :
+
+.IP + :
+L'addition.
+.IP - :
+La soustraction.
+.IP * :
+La multiplication.
+.IP / :
+La division euclidienne.
+.IP % :
+Le modulo.
+.PP
+
+Attention, pour utiliser la multiplication, la division euclidienne et le modulo, il est nécessaire de compiler en utilisant une ROM qui implémente ces opérateurs avec des fonctions nommées mult, div et mod respectivement.
+
+.SS OPÉRATEURS DE COMPARAISON
+
+Les opérateurs de comparaison disponibles sont :
+
+.IP == :
+Opérateur d'égalité.
+.IP != :
+Opérateur d'inégalité.
+.IP > :
+Opérateur de supériorité.
+.IP < :
+Opérateur d'infériorité.
+.IP >= :
+Supériorité ou égalité. 
+.IP <= :
+Infériorité ou égalité.
+.PP
+
+.SS OPÉRATEURS LOGIQUES
+
+Les opérateurs logiques disponibles sont les suivants :
+
+.IP et :
+et logique.
+.IP ou :
+ou logique. 
+.IP ! :
+négation logique.
+.PP
+
+.SH INTERACTION AVEC L'UTILISATEUR
+
+.SS AFFICHAGE
+
+L'affichage se fait à l'aide des mots-clés affv et affc.
+Le mot-clé
+.B affv
+suivi d'une valeur ou une variable entre parenthèses permet d'afficher cette valeur ou la valeur de cette variable sous forme décimale.
+
+.RS 4
+.br
+.B var a = 1;
+.br
+.B affv(5); // Affiche 5.
+.br
+.B affv(a); // Affiche 1.
+.RE
+
+Le mot-clé
+.B affc
+suivi d'une valeur ou une variable entre parenthèses permet d'afficher cette valeur ou la valeur de cette variable sous forme d'un caractère. La valeur correspondant à un caractère peut-être représentée par ce caractères entre apostrphes.
+
+.RS 4
+.br
+.B var a = 'a';
+.br
+.B affc(a);   // Affiche a.
+.br
+.B affc('b'); // Affiche b. 
+.br
+.B .RE
+
+.SS RÉCUPÉRATION D'ENTRÉE
+
+Le mot-clé
+.B entre
+permet de récupérer une valeur entrée par l'utilisateur.
+.RS 4
+.br
+.B var a = entre(); // La valeur entrée par l'utilisateur est affectée à la variable a.
+.RE

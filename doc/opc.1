@@ -1,0 +1,65 @@
+.\" Manuel de opc.
+.\" Contact : victor.matalonga@etud.univ-paris8.fr pour correction d'erreurs.
+.TH opc 1 "30 Juillet 2022" "1.0" ""
+.SH NOM
+opc : Un compilateur pour le langage microbe et l'ordinateur en papier. 
+.SH SYNOPSIS
+.B opc 
+.RB [ -sb ]
+.RB [ -o
+.IR sortie ]
+.RB [ -t
+.IR offset ]
+.I entrée
+.SH DESCRIPTION
+opc permet de compiler le langage microbe en langage machine de l'ordinateur en papier. 
+
+En fonctionnement normal la compilation se fait en deux temps. Le code assembleur papier est d'abord généré dans un fichier temporaire, puis ce fichier est assemblé par 
+.B pasm
+pour produire le fichier final.
+
+Le code produit peut-être exécuté par 
+.op
+l'émulateur de l'ordinateur en papier 
+.BR (op) .
+.SH OPTIONS
+.TP
+.B -b
+Écrit le résultat de la compilation sous format binaire. Si l'option 
+.B -o 
+n'est pas utilisée le fichier de sortie par défaut a le même nom que le fichier d'entrée avec l'extension 
+.B .mic
+remplacée par
+.BR .bin .
+N'a pas d'effet si l'option 
+.B -s
+est présente.
+.PP
+.TP 
+.BI -o \ sortie
+Écrit le résultat de la compilation dans le fichier 
+.IR sortie .
+Si cette option n'est pas utilisée, le nom du fichier de sortie est 
+.BR a.out .
+.PP
+.TP
+.B -s
+Produit uniquement le code assembleur papier, n'effectue pas l'assemblage. Si l'option 
+.B -o 
+n'est pas utilisée le fichier de sortie par défaut a le même nom que le fichier d'entrée avec l'extension 
+.B .mic
+remplacée par 
+.BR .pasm .
+.PP
+.TP
+.BI -t \ offset
+Compile le programme pour que la première instruction se trouve à l'adresse 
+.IR offset .
+N'a pas d'effet si l'option
+.B -s
+est présente.
+
+.SH VOIR AUSSI
+.BR pasm (1), \ op (1), \ microbe (7)
+.SH AUTEUR
+Victor Matalonga (victor.matalonga@etud.univ-paris8.fr)

@@ -1,0 +1,35 @@
+.\" Manuel de op.
+.\" Contact : victor.matalonga@etud.univ-paris8.fr pour correction d'erreurs.
+
+.TH op 1 "30 Juillet 2022" "1.0" ""
+.SH NOM
+op : Un émulateur de l'ordinateur en papier amélioré. 
+.SH SYNOPSIS
+.B op 
+.RB [ -s ]
+.RB [ -r
+.IR rom ]
+.I fichier
+.SH DESCRIPTION
+Ce programme est un émulateur de l'ordinateur en papier auquel plusieurs améliorations ont été apportées : ajout d'une pile pour réaliser des appels de fonction et d'une zone de mémoire accessible uniquement en lecture (ROM) pour stocker des fonctions prédéfinies. Il permet d'exécuter des programmes écrits pour l'ordinateur en papier. 
+
+Le 
+.I fichier 
+donné en argument doit contenir le programme à exécuter sous forme de codes hexadécimaux. Un tel programme peut-être compilé à partir du langage microbe (voir 
+.BR microbe (7)).
+.SH OPTIONS
+.TP
+.B -s
+Active le stepper
+.TP 
+.BI -r \ rom
+Permet d'exécuter le programme en utilisant la ROM 
+.I rom
+à la place de la ROM par défaut. Il n'est pas nécessaire de fournir le chemin exact de la ROM que l'on veut utiliser, en effet les ROMs définies par l'utilisateur sont normalement toutes stockées au même endroit.
+.SH VOIR AUSSI
+.BR pasm (1), 
+.BR opc (1),
+.BR asm-papier (7),
+.BR microbe (7)
+.SH AUTEUR
+Victor Matalonga (victor.matalonga@etud.univ-paris8.fr)

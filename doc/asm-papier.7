@@ -1,0 +1,390 @@
+.\" Manuel de pasm.
+.\" Contact : victor.matalonga@etud.univ-paris8.fr pour correction d'erreurs.
+.TH asm-papier 7 "31 Juillet 2022" "1.0" ""
+.SH DESCRIPTION
+
+Cette page de manuel contient la documentation pour le langage d'assemblage de l'ordinateur en papier : l'assembleur papier ou p-assembleur. 
+.SH STRUCTURE D'UN PROGRAMME
+
+Un programme écrit en assembleur papier consiste en une suite d'instructions séparées par des retours à la ligne.
+Étant donné que pour être syntaxiquement correcte, une instruction doit se terminer par un retour à la ligne,
+un programme doit toujours se terminer par une ligne vide.
+
+Une instruction peut être une déclaration de variable ou de fonction, un label, une opération ou un label suivi d'une opération.
+
+Il est possible d'écrire des commentaires commençant par un point virgule. Tout le texte depuis le point virgule
+jusqu'à la fin de la ligne est ignoré :
+.RS
+.B ; Ceci est un commentaire. 
+.RE
+.SH Déclaration de variables
+
+Les variables sont déclarées avec le mot-clé globl suivi du nom de la variable et d'un retour à la ligne :
+.RS
+.B globl varname
+.RE
+
+Les noms de variables peuvent commencer par une lettre majuscule ou minuscule, un point ou un tiret bas. Le reste du nom de la variable peut comporter des lettres majuscules ou minuscules, des chiffres ou des tirets bas.
+
+Pour chaque variable déclarée, un espace mémoire est réservé pour stocker sa valeur.
+
+Si une variable est utilisée comme argument d'une opération, celle-ci est remplacée par l'adresse mémoire
+correspondante.
+Ainsi le code suivant aura pour effet de stocker la valeur 0 à l'emplacement mémoire correspondant à la variable
+var (plus d'informations sur les opérations LOAD et STORE dans la section opérations.) :
+.RS
+.B globl var
+.RS
+.B LOAD #0
+.br
+.B STORE var
+.RE
+.RE
+
+Il est possible d'initialiser la valeur d'une variable globale, pour cela il suffit d'écrire cette valeur à la suite du nom de la variable.
+Ainsi le code suivant aura pour effet de charger la valeur 1 dans l'accumulateur:
+.RS
+.B globl var 1
+.RS
+.B LOAD var
+.RE
+.RE
+
+Une variable globale peut aussi prendre pour valeur une chaîne de caractères (uniquement des caractères ascii
+imprimables délimités par le caractère ""). Dans ce cas, la valeur correspondant au premier caractère est stockée à l'emplacement de la variable et les valeurs correspondant aux autres caractères sont stockées dans les emplacements suivants de la mémoire :
+.RS
+.B globl var """chaine"""
+.RE
+
+j
+À noter que la mémoire de l'ordinateur en papier contient 256 emplacements (hors pile mais on ne peut pas
+stocker de variables globales dans la pile, elles risqueraient d'être écrasées), on ne pourra donc avoir au maximum
+que 256 variables (mais on ne pourra alors rien en faire car il ne resterait plus de place pour le programme !).
+
+.SH LABELS
+Un labels permet de de définir un endroit du code sur lequel on pourra revenir à l'aide d'une instruction de
+saut.
+Un label est composé d'un nom suivi de deux point :
+.RS
+.B label:
+.RE
+
+Les noms de labels comme les noms de variables peuvent commencer par une lettre majuscule ou minuscule,
+un point ou un tiret bas. Le reste du nom du label peut comporter des lettres majuscules ou minuscules, des
+chiffres ou des tirets bas.
+
+On peut ensuite utiliser le nom du label pour revenir à ce point du code.
+Ainsi le programme suivant demande une entrée à l'utilisateur, présente cette même entrée en sortie, puis revient
+au début et recommence (plus d'informations sur les opérations IN , OUT et JUMP dans la section opérations.) :
+.RS
+.B globl var
+.br
+.B loop:
+.RS
+.B IN var
+.br
+.B OUT var
+.br
+.B JUMP loop
+.RE
+.RE
+
+On ne peut pas avoir deux labels du même nom, cela déclenche une erreur comme dans l'exemple suivant :
+.RS
+.B globl var
+.br
+.B label1:
+.RS
+.B LOAD #0
+.RE
+.B label1:
+.RS
+.B STORE var
+.RS
+
+.SH PILE
+La pile est une zone de la mémoire qui n'est pas destinée à accueillir les instruction du programme à exécuter. Elle est principalement utilisée pour stocker les arguments et l'adresse de retour lors d'un appel de fonction.
+Elle peut également servir à stocker des variables locales ou des résultats intermédiaires de calculs.
+
+Elle est située à partir de la case 256 et continue jusqu'à la case 512 de la mémoire.
+
+Elle est manipulée par les instructions POP, PUSH et MSP .
+
+Avertissement : Même si l'adressage absolu d'éléments dans la pile est possible, il est à utiliser avec précaution.
+
+.SH FONCTIONS
+Une fonction est une partie de code qui peut être exécutée depuis un autre point du code à l'aide de l'opérateur
+spécial CALL . Lorsque l'opérateur CALL est utilisé, l'adresse de retour est ajoutée à la pile et l'exécution continue
+à partir du label donné en argument. À la n de l'exécution de la fonction, l'opérateur RET dépile l'adresse de
+retour et saute pour revenir à l'endroit du code où l'appel a été fait et continuer l'exécution à partir de là.
+
+Une fonction doit être déclarée avec le mot clé func .
+.RS
+.B func mafonction
+.RE
+
+Une fonction doit commencer par un label dont le nom constitue le nom de la fonction. Une fonction doit se terminer par l'opération RET .
+
+Les arguments sont passés par la pile.
+Il est donc nécessaire de les ajouter à la pile à l'aide de l'opération PUSH avant l'appel et de les retirer ensuite ave  POP ou MSP .
+Ils sont accessible depuis le corps de la fonction à partir de la deuxième position de la pile (la première étant occupée par l'adresse de retour).
+
+La valeur de retour est placée dans l'accumulateur.
+
+Exemple de fonction :
+
+.RS
+.B ; mult.pasm :
+.br
+.B ; Programme permettant de multiplier deux nombres positifs
+.br
+.B ; entrés par  l'utilisateur.
+
+.B globl n1
+.br
+.B globl n2
+.br
+.B func multiply
+
+.B main:
+.br
+.RS
+.B	IN	n1
+.br
+.B	IN	n2
+.br
+.B	PUSH	n1  ; Ajout des nombres entrés par l'utilisateur sur 
+.br
+.B ; la pile
+.br
+.B	PUSH	n2
+.br
+.B	CALL	multiply
+.br
+.B	MSP	#-2 ; Retirer les arguments de la pile.
+.br
+.B	STORE n1  ; Le résultat est dans l'accumulateur, on le ; stocke dans n1
+.br
+.B	OUT 	n1  ; Afficher le résultat
+.br
+.B	JUMP	main
+.RE
+
+.B	multiply:
+.RS
+.br
+.B	PUSH	#0   ; La première position de la pile servira aux  
+.br
+.B	; calculs intermédiaires
+.RE
+.B loop: LOAD %1   ; Charger le résultat intermédiaire
+.RS
+.br
+.B	ADD 	%4   ; Ajouter le premier argument 
+.br
+.B	STORE %1   ; Remettre le résultat intermédiaire à sa place
+.br
+.B	LOAD	%3   ; Charger le deuxième argument
+.br
+.B	SUB 	#1   ; Lui retirer 1
+.br
+.B	STORE %3   ; Le remettre à sa place
+.br
+.B	BRZ 	out  ; Si il vaut 0 on a fini la multiplication et on 
+.br
+.B	; saute à la fin.
+.br
+.B	JUMP 	loop ; Sinon on revient au début de la boucle.
+.RE
+.B out:
+.RS
+.br
+.B	POP          ; On dépile le résultat dans l'accumulateur.
+.br
+.B	RET
+.RE
+.RE
+
+Les lignes 20 à 34 constituent la fonction multiply .
+
+Le programme demande à l'utilisateur d'entrer deux nombres (stockés dans les variables n1 et n2 (lignes 10-11),
+les ajoute à la pile (lignes 12-13) puis appelle la fonction multiply (ligne 12). L'exécution continue alors à
+partir de la ligne 20, jusqu'à rencontrer l'instruction RET ligne 34. L'exécution reprend alors du point où elle en
+était avant l'appel de fonction soit à partir de la ligne 15, les arguments sont dépilés et le résultat calculé par
+la fonction multiply est présenté en sortie.
+
+.SH OPERATIONS
+Une opération est composé d'un nom d'opération (ou mnémonique) et d'un argument. L'argument est la valeur
+à traiter ou son l'adresse selon le mode d'adressage. L'ordinateur en papier possède un registre mémoire appelé
+accumulateur dans lequel sont effectuées les opérations.
+
+Les opérations de saut ( JUMP , BRZ et BRN ) sont particulières : elles ne prenent pas une valeur ou une adresse
+en argument mais le nom d'un label.
+
+Les opérations CALL et RET sont des opérations spéciales concernant les fonctions.
+
+.SS MODES D'ADRESSAGE
+Les valeurs et les adresses doivent être écrites en décimal.
+.TP
+Adressage immédiat :
+Une case mémoire de l'ordinateur en papier étant de 9 bits, la valeur devra être comprise entre -256 et 255 (nombre entier signé sur 9 bits représenté en complément à deux).
+
+.B LOAD #0 ; Charge la valeur 0 dans l'accumulateur.
+
+Exception : pour l'opération LOAD , si l'adressage absolu est suivi d'un nom de variable, c'est l'adresse de
+la variable qui est chargée dans l'accumulateur.
+
+.B LOAD #var ; Charge l'adresse de var dans l'accumulateur.
+
+.PP
+.TP
+Adressage absolu :
+La valeur à utiliser se trouve à l'adresse mémoire donnée en argument. L'ordinateur en
+papier ayant 512 cases mémoire, le nombre donné en argument devra être compris entre 0 et 512.
+
+.B LOAD #1 ; Charge 1 dans l'accumulateur.
+.br
+.B STORE 7 ; Stocke 1 dans la case mémoire d'adresse 7.
+.br
+.B LOAD 7  ; Charge 1 (la case mémoire d'adresse 7 contient 1)
+
+On peut également utiliser une variable (qui correspond à une adresse mémoire).
+
+.B globl var ; Déclaration de la variable var.
+.br
+.B LOAD #1 ; Charge 1.
+.br
+.B STORE var ; Stocke 1 dans la case correspondant àvar.
+.br
+.B LOAD var ; Charge 1.
+
+Il est déconseillé d'utiliser l'adressage absolu sans variable car le code ne fonctionnerait alors que s'il est
+placé à un endroit précis en mémoire. Il est préférable d'utiliser des variables (et de réutiliser celles-ci dès
+que possible pour économiser la mémoire limitée de l'ordinateur en papier).
+
+Si l'espace mémoire fait cruellement défaut, il est éventuellement possible d'utiliser l'adressage absolu sans
+variable pour stocker des valeurs à des endroit de la mémoire contenant des instructions déjà exécutées et
+qui ne le seront plus dans le reste du programme, mais cela ressemble fortement à un hack...
+.PP
+
+.TP
+Adressage indirect :
+La valeur donnée en argument est l'adresse de la case mémoire contenant l'adresse de
+la case mémoire contenant la valeur. Ici aussi le nombre donné en argument devra être compris entre 0 et
+255 en raison des limitations de l'ordinateur en papier.
+
+.B LOAD #1 ; Charge 1.
+.br
+.B STORE 11 ; Stocke 1 dans la case 11.
+.br
+.B LOAD #11 ; Charge 11.
+.br
+.B STORE 12 ; Stocke 11 dans la case 12.
+.br
+.B LOAD *12 ; Charge 1 (la case 12 contient 11, la case 11 contient ; 1)
+.PP
+
+.TP
+Adressage direct relatif au sommet de la pile :
+La valeur donnée en argument est une position dans la
+pile, la valeur à utiliser se trouve à cette position dans la pile. La numérotation des éléments de la pile
+commence à 1.
+
+.B PUSH #5 ; Ajoute la valeur 5 au sommet de la pile.
+.br
+.B LOAD %1 ; Charge la valeur en première position dans la pile (5).
+.PP
+
+.TP
+Adressage indirect relatif au sommet de la pile :
+La valeur donnée en argument est une position dans la
+pile. La valeur à utiliser se trouve dans la case mémoire dont l'adresse se trouve à cette position dans la
+pile. La numérotation des éléments de la pile commence à 1.
+
+.B LOAD #5 ; Charge 5.
+.br
+.B STORE 11 ; Stocke 5 dans à l'adresse 11.
+.br
+.B PUSH #11 ; Ajoute la valeur 11 au sommet de la pile.
+.br
+.B LOAD *%1 ; Charge 5 (la valeur se trouvant dans la case dont 
+.br
+.B ; l'adresse se trouve au sommet de la pile).
+
+.SS LISTE DES OPERATEURS
+.TS
+tab (;);
+l lx.
+ADD;T{
+Ajoute une valeur à celle contenue dans l'accumulateur. Le résultat est dans l'accumulateur.
+T}
+SUB;T{
+Soustrait une valeur à celle contenue dans l'accumulateur. Le résultat est dans l'accumulateur.
+T}
+NAND;T{
+Effectue un non-et bit à bit entre une valeur et celle contenue dans l'accumulateur. Le résultat est dans l'accumulateur.
+T}
+LOAD;T{
+Charge une valeur dans l'accumulateur.
+T}
+LEA;T{
+Adressage uniquement direct par la pile. Charge l'adresse mémoire correspondant à une position de la
+pile.
+T}
+MSP;T{
+Adressage immédiat uniquement. Incrémente le compteur de pile (l'argument peut être négatif).
+T}
+STORE;T{
+Stocke la valeur contenue dans l'accumulateur dans l'adresse mémoire fournie en argument (l'adressage
+immédiat n'a pas de sens pour cette opération et est donc considéré comme une erreur).
+T}
+IN;T{
+Stocke une valeur entrée par l'utilisateur dans l'adresse mémoire fournie en argument (l'adressage immédiat
+n'a pas de sens pour cette opération et est donc considéré comme une erreur).
+T}
+OUT;T{
+Présente en sortie une valeur sous forme décimale.
+T}
+OUTC;T{
+Présente en sortie une valeur sous forme de caractère.
+T}
+POP;T{
+Retire une valeur du sommet de la pile et la place ailleurs (Si appelé sans argument la valeur retirée
+est perdue). Pas d'adressage par la pile.
+T}
+PUSH;T{
+Ajoute une valeur au sommet de la pile (Si appelé sans argument, la valeur ajoutée est celle contenue
+dans l'accumulateur). Pas d'adressage par la pile.
+T}
+JUMP;T{
+Continue l'exécution du programme à partir du label dont le nom est donné en argument.
+T}
+BRN;T{
+Si la valeur dans l'accumulateu
+T}
+BRZ;T{
+Si l'accumulateur contient 0, continue l'exécution du programme à partir du label dont le nom est donné
+en argument.
+T}
+CALL;T{
+Appelle la fonction dont le nom est donné en argument.
+T}
+RET;T{
+(Pas d'argument) Termine l'exécution d'une fonction et reprend le code où il en était au moment de
+l'appel.
+T}
+.TE
+
+.SH CONSEILS ET BONNES PRATIQUES
+La mémoire de l'ordinateur en papier étant très limitée, il est conseillé de réutiliser au maximum les variables
+globales et locales (dans la pile).
+
+L'ordinateur en papier n'ayant pas de système d'exploitation il est incapable de reconnaître que l'exécution
+du programme est terminée. Il est donc conseillé d'ajouter une boucle infinie en fin de programme an que
+l'ordinateur ne continue pas après la fin du programme à exécuter ce qui n'est pas du code. Il est aussi possible
+à la n du programme de sauter au début afin qu'il s'exécute en boucle. Sinon sauter à l'adresse -1 provoque
+l'arrêt du programme.
+
+Pour une mise en forme du code qui ressemble à de l'assembleur il est conseillé d'écrire les labels et les déclarations
+en début de ligne, d'ajouter une tabulation avant le mnémonique d'une opération et une tabulation entre le
+mnémonique et l'argument. Les labels correspondant à un nom de fonction devraient être seuls sur leur ligne.
