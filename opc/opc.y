@@ -33,14 +33,11 @@ int n_glob = 0;
 
 char *fonction;
 
- struct { char *ch; int lab; } ch_litt[256];
+struct { char *ch; int lab; } ch_litt[256];
 int n_ch_litt = 0;
 
 int deb_esp_loc[256] = { 0 };
 int n_esp_loc = 1;
-
-int if_np, else_np;
-int n_ifnp = 0, n_elnp = 0;
 
 %}
 			
@@ -56,9 +53,9 @@ int n_ifnp = 0, n_elnp = 0;
 %token SI SINON TANTQUE POUR VAR RETOUR ET OU EGAL INEG SUPEG INFEG FONC AFFC AFFV ENTRE
 
 %type	<e>		expr affectation arg
-%type	<i>		args
+%type	<i>		args list_decl_args
 %type	<inp>		si_debut
-%nonassoc ')'
+//			%nonassoc ')'
 %nonassoc SI_SANS_SINON
 %nonassoc SINON
 %right '='
@@ -122,6 +119,7 @@ glob_decl : VAR NOM ';'
 			  YYERROR;
 		      }
 		    printf("globl %s %i\n", $2, $4->pos);
+		    glob_taille[n_glob] = 1;
 		    globales[n_glob++] = $2; 
 		}
 	|	VAR NOM '[' NOMBRE ']' ';'
@@ -147,9 +145,6 @@ glob_decl : VAR NOM ';'
                       printf("\"\n");
 		      glob_taille[n_glob] = $4;
                       globales[n_glob++] = $2; }
-/*	|	VAR NOM '[' ']' '=' CHAINE ';'
-		{   printf("globl %s \"%s\"", $2, $6);
-                    globales[n_glob++] = $2; }*/
 ;
 
 fonc : FONC NOM 
@@ -161,15 +156,20 @@ fonc : FONC NOM
        {   position = 0; incr = -1; }
        listinstr '}'
        {
-	   printf("fin%s:\n\tMSP #%i\n\tRET\n", $2, -n_push);
+	   if (!strcmp($2, "main") && $5 != 0)
+	   {
+	       yyerror("La fonction main ne peut pas prendre d'arguments.");
+	       YYERROR;
+	   }
+	   printf("\tMSP #%i\nfin%s:\n\tRET\n", -n_push, $2);
 	   n_expr = 0;
 	   n_push = 0;
        }
 ;
 
-list_decl_args :
-	|	NOM { fairexpr($1); }
-	|	list_decl_args ',' NOM { fairexpr($3); }
+list_decl_args : { $$ = 0; }
+	|	NOM { fairexpr($1); $$ = 1; }
+	|	list_decl_args ',' NOM { fairexpr($3); $$ = $1 + 1; }
 ;
 
 instr : ';'
@@ -189,27 +189,19 @@ instr : ';'
 	|	expr ';' { libere($1); }
 	|       si_debut instr %prec SI_SANS_SINON
                 {
-		    printf("sinon%i:\n", $1.i);
 		    REMET_PILE_ETAT_ANT($1.np)
+		    printf("sinon%i:\n", $1.i);
 		}
 	|	si_debut
 		instr SINON
  	        {
-		    $1.np = n_push - $1.np;
-		    incr_n_expr(-$1.np);
-		    position += $1.np;
-		    n_push -= $1.np;
-		    printf("\tMSP #%i\n", -$1.np);
+		    REMET_PILE_ETAT_ANT($1.np)
 		    $<i>$ = n_push;
 		    printf("\tJUMP fin%1$i\nsinon%1$i:\n", $1.i);
 		}
                 instr
                 {
-		    $<i>4 = n_push - $<i>4;
-		    printf("\tMSP #%i\n", -$<i>4);
-		    incr_n_expr(-$<i>4);
-		    position += $<i>4;
-		    n_push += -$<i>4;
+		    REMET_PILE_ETAT_ANT($<i>4);
                     printf("fin%i:\n", $1.i);
 		}
 	|	TANTQUE
@@ -262,17 +254,9 @@ instr : ';'
 		{
 		    REMET_PILE_ETAT_ANT($<i>13);
 		    printf("\tJUMP incr%1$i\nfin%1$i:\n", $<i>6);
-		    /*int pour_np = n_push - $<i>2;
-		    if (pour_np)
-		    {
-			printf("\tMSP #%i\n", -pour_np);
-			incr_n_expr(-pour_np);
-			n_push -= pour_np;
-			position += pour_np;
-		    }*/
 		    libere_variables_locales(deb_esp_loc[--n_esp_loc]); 
 		}
-	|	RETOUR expr ';'
+	|	RETOUR expr ';' 
 		{
 		    if ($2->cst)
 		      {
@@ -282,10 +266,12 @@ instr : ';'
 		      {
 		        printf("\tLOAD %%%i\n", $2->pos + n_push);
 		      }
+		    printf("\tMSP #%i\n", -n_push);
 		    printf("\tJUMP fin%s\n", fonction);
 		    libere($2);
 		}
-	|	RETOUR ';' { printf("\tJUMP fin%s\n", fonction); }
+	|	RETOUR ';' { printf("\tMSP #%i\n", -n_push);
+		             printf("\tJUMP fin%s\n", fonction); }
 	|	decl ';'
 	|	AFFC '(' expr ')' ';'
 		{
@@ -354,6 +340,8 @@ nom_ou_init : NOM
 			YYERROR;
 		      }
 		    fairexpr($1);
+		    printf("\tMSP #1\n");
+		    ++n_push;
 		}
 	|	NOM '[' NOMBRE ']'
 	        {
@@ -421,35 +409,6 @@ affect_list : affectation { libere($1); }
 affectation : NOM '=' expr
 	      {
 		  expr *e1;
-		  /*if ((e1 = exprvar($1)))
-		    {
-		      if ($3->cst)
-		        {
-		          printf("\tLOAD #%i\n\tSTORE %%%i\n",
-			         $3->pos, e1->pos + n_push);
-			  $$ = faire_cst_expr($3->pos);
-		        }
-		      else
-		        {
-		          printf("\tLOAD %%%i\n", $3->pos + n_push);
-		          printf("\tSTORE %%%i\n", e1->pos + n_push);
-		          $$ = $3;
-		        }
-		    }
-		  else if (glob_existe($1))
-		    {
-		      if ($3->cst)
-		        {
-		          printf("\tLOAD #%i\n\tSTORE %s\n",
-			         $3->pos, $1);
-			  $$ = faire_cst_expr($3->pos);
-		        }
-		      else		        {
-		          printf("\tLOAD %%%i\n", $3->pos + n_push);
-		          printf("\tSTORE %s\n", $1);
-		          $$ = $3;
-			}
-		    }*/
 		  $$ = $3;
 		  CHRG_EXPR($3)
 		  int i;
@@ -496,7 +455,7 @@ affectation : NOM '=' expr
 			  YYERROR;
 		      }
 		      printf("\tLEA %%%i\n", e1->pos + n_push);
-		      OP_EXPR("ADD", $3);// PLUTOT SUB ?
+		      OP_EXPR("ADD", $3);
 		      libere($3);
 		      printf("\tPUSH\n"); 
 		      ++n_push;
@@ -510,7 +469,7 @@ affectation : NOM '=' expr
 			  YYERROR;
 		      }
 		      printf("\tLOAD #%s\n", $1);
-		      OP_EXPR("ADD", $3);// PLUTOT SUB ?
+		      OP_EXPR("ADD", $3);
 		      libere($3);
 		      printf("\tPUSH\n"); 
 		      ++n_push;
@@ -598,7 +557,7 @@ expr : NOM
 			  YYERROR;
 		      }
 		      printf("\tLEA %%%i\n", e1->pos + n_push);
-		      OP_EXPR("ADD", $3);// PLUTOT SUB ?
+		      OP_EXPR("ADD", $3);
 		      libere($3);
 		      printf("\tPUSH\n"); 
 		      ++n_push;
@@ -625,36 +584,7 @@ expr : NOM
 		  printf("\tLOAD *%%1\n\tMSP #-1\n");
 		  --n_push;
 		  STCK_EXPR($$);
-		}   
-		    /*if ($3->cst)
-		      {
-			int n = $3->pos;
-			libere($3);
-			$$ = fairexpr(NULL);
-			printf("\tPUSH #%i\n\tLOAD *%%1\n",
-			       exprvar($1)->pos + n_push + 256);
-			if (recycle)
-		        {
-			    printf("\tSTORE %%%i\nPOP #1\n",
-				   $$->pos + n_push);
-			}
-			else
-		        {
-			    printf("\tSTORE %%1\n");
-			    ++n_push;
-			}
-		      }
-		    else
-		      {
-                        int p3 = $3->pos + n_push;
-			libere($3);
-			$$ = fairexpr(NULL);
-			printf("\tLOAD #%s\n\tADD %%%i\n\tPUSH\n\tLOAD *%%1\n", $1, p3);
-			
-			printf("\tPUSH\n\tLOAD *%%1\n\tSTORE %%%i\n");
-			++n_push;
-		    libere($3);*/
-		
+		}  
 	|	'-' expr %prec FORT
 		{
 		    if ($2->cst)
@@ -921,8 +851,7 @@ arg : expr { $$ = $1; }
                     e->nom = nom_ch;
                     e->litt = true;
                     $$ = e;
-		}
-                    
+		}                   
 ;
 
 %%
@@ -981,41 +910,14 @@ expr* op_mult_div_mod(char *op, expr *e1, expr *e2)
     }
   else
     {
-	/*e = fairexpr(NULL);
-      if (c1)
-	{
-	  printf("\tLOAD #%i\n", a1);
-	}
-      else
-	{
-	  printf("\tLOAD %%%i\n", a1 + n_push);
-	  }*/
       CHRG_EXPR(e1);
       libere(e1);
       printf("\tPUSH\n");
       ++n_push;
-      /*if (c2)
-	{
-	  printf("\tLOAD #%i\n", a2);
-	}
-      else
-	{ // +1 pour le push précédent.
-	  printf("\tLOAD %%%i\n", a2 + n_push + 1);
-	  
-	  }*/
       CHRG_EXPR(e2);
       libere(e2);
       printf("\tPUSH\n\tCALL %s\n\tMSP #-2\n", op);//Le MSP #-2 annule les push.
       --n_push;
-      /*if (recycle)
-	{
-	  printf("\tSTORE %%%i\n", e->pos + n_push);
-	}
-      else
-	{
-	  printf("\tPUSH\n");
-	  n_push++;
-	  }*/
       STCK_EXPR(e);
     }
   return e;
