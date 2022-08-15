@@ -32,4 +32,4 @@ uninstall :
 .PHONY : clean
 
 clean :
-	-rm pasm.tab.h pasm.tab.c lex.yy.c lex.yy.o pasm.tab.o main.o 
+	-rm pasm pasm.tab.h pasm.tab.c lex.yy.c lex.yy.o pasm.tab.o main.o 

@@ -35,4 +35,4 @@ uninstall :
 .PHONY : clean
 
 clean :
-	-rm opc.tab.h opc.tab.c lex.yy.c lex.yy.o opc.tab.o main.o 
+	-rm opc opc.tab.h opc.tab.c lex.yy.c lex.yy.o opc.tab.o main.o 
