@@ -85,7 +85,7 @@ decl_ou_fonc : glob_decl
 
 glob_decl : VAR NOM ';'
             {
-		if (glob_existe($2))
+		if (glob_existe($2) >= 0)
 		  {
 		    yyerror("Une variable globale de ce nom existe déjà");
 		    YYERROR;
@@ -102,7 +102,7 @@ glob_decl : VAR NOM ';'
 	    }
 	|	VAR NOM '=' expr ';'
                 {
-		    if (glob_existe($2))
+		    if (glob_existe($2) >= 0)
 		      {
 		        yyerror("Une variable globale de ce nom existe déjà");
 		        YYERROR;
@@ -124,7 +124,7 @@ glob_decl : VAR NOM ';'
 		}
 	|	VAR NOM '[' NOMBRE ']' ';'
                 {   
-		    if (glob_existe($2))
+		    if (glob_existe($2) >= 0)
 		      {
 		        yyerror("Une variable globale de ce nom existe déjà");
 		        YYERROR;
@@ -424,7 +424,7 @@ affectation : NOM '=' expr
 
 		      printf("\tSTORE %%%i\n", e1->pos + n_push);
 		  }
-		  else if ((i = glob_existe($1)))
+		  else if ((i = glob_existe($1)) >= 0)
 		  {
 		      if (glob_taille[i] != 1)
 		      {
@@ -460,7 +460,7 @@ affectation : NOM '=' expr
 		      printf("\tPUSH\n"); 
 		      ++n_push;
 		  }
-		  else if ((i = glob_existe($1)))
+		  else if ((i = glob_existe($1)) >= 0)
 		  {
 		      if (glob_taille[i] <= 1)
 		      {
@@ -490,7 +490,7 @@ expr : NOM
 		    expr *e = exprvar($1);
 		    if (!e)
 		      {
-			if (glob_existe($1))
+			if (glob_existe($1) >= 0)
 			  {
 			    e = calloc(sizeof(expr), 1);
 			    e->nom = $1;
@@ -562,7 +562,7 @@ expr : NOM
 		      printf("\tPUSH\n"); 
 		      ++n_push;
 		  }
-		  else if ((i = glob_existe($1)))
+		  else if ((i = glob_existe($1)) >= 0)
 		  {
 		      if (glob_taille[i] <= 1)
 		      {

@@ -47,7 +47,7 @@ extern int n_esp_loc;
     } 						  \
   else if ((E)->glob) 				  \
     { 						  \
-      printf("\tLOAD #%s\n", (E)->nom); 	  \
+      printf("\tLOAD %s\n", (E)->nom); 	  \
     } 						  \
   else  					  \
     { 						  \
@@ -58,7 +58,7 @@ extern int n_esp_loc;
 #define CHRG_EXPR_NON_CST(E)                      \
   if ((E)->glob)	     			  \
     { 						  \
-      printf("\tLOAD #%s\n", (E)->nom); 	  \
+      printf("\tLOAD %s\n", (E)->nom); 	  \
     } 						  \
   else 					          \
     { 						  \
@@ -73,7 +73,7 @@ extern int n_esp_loc;
     }                                               \
   else if ((E)->glob)                               \
     {                                               \
-      printf("\t%s #%s\n", OP, (E)->nom);           \
+      printf("\t%s %s\n", OP, (E)->nom);           \
     }                                               \
   else                                              \
     {                                               \
